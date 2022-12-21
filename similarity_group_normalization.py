@@ -8,6 +8,9 @@ import global_vars
 from agn_utils import getLayerIndex
 from random_group_normalization import better_places
 from k_means_constrained import KMeansConstrained
+import numpy as np
+import sys
+np.set_printoptions(threshold=sys.maxsize)
 
 
 class SimilarityGroupNorm(Module):
@@ -22,13 +25,46 @@ class SimilarityGroupNorm(Module):
         self.group_size = int(num_channels / num_groups)
         self.eps = eps
 
-    def forward(self, Conv_input):
+        self.before_list = []
+        self.after_list = []
+
+        if global_vars.args.save_shuff_idxs:
+            self.batch_layer_index = {}
+
+    def forward(self, Conv_input, batch_num: int):
+
+        if global_vars.args.plot_std:
+            N, C, H, W = Conv_input.size()
+            group_size = int(C / self.num_groups)
+            input_no_h_w = Conv_input.reshape(N, C, H * W)
+            channel_dist = cat([input_no_h_w[i, :, :] for i in range(N)], dim=1)
+            channel_dist_by_groups = cat([channel_dist[i:i+group_size, :].unsqueeze(0) for i in range(int(C/group_size))], dim=0)
+            std_before = channel_dist_by_groups.reshape(int(C/group_size), -1).std(dim=1)
+
+            self.before_list.append(np.sum(std_before.cpu().detach().numpy()))
+
         if global_vars.recluster:
             self.recluster(Conv_input)
+            self.batch_layer_index[batch_num] = (self.indexes, self.reverse_indexes)
             # raise Exception("stop")
 
-        ret = self.groupNorm(Conv_input[:, self.indexes, :, :])[:, self.reverse_indexes, :, :].requires_grad_(
-            requires_grad=True)
+        if global_vars.args.save_shuff_idxs:
+            if batch_num == 31:
+                print()
+            ret = self.groupNorm(Conv_input[:, self.batch_layer_index[batch_num][0], :, :])[:, self.batch_layer_index[batch_num][1], :, :].requires_grad_(
+                requires_grad=True)
+        else:
+            ret = self.groupNorm(Conv_input[:, self.indexes, :, :])[:, self.reverse_indexes, :, :].requires_grad_(
+                requires_grad=True)
+
+        if global_vars.args.plot_std:
+            input_no_h_w = Conv_input[:, self.indexes, :, :].reshape(N, C, H * W)
+            channel_dist = cat([input_no_h_w[i, :, :] for i in range(N)], dim=1)
+            channel_dist_by_groups = cat([channel_dist[i:i+group_size, :].unsqueeze(0) for i in range(int(C/group_size))], dim=0)
+            std_after = channel_dist_by_groups.reshape(int(C/group_size), -1).std(dim=1)
+            self.after_list.append(np.sum(std_after.cpu().detach().numpy()))
+
+            print("std before - after:", np.sum((std_before - std_after).cpu().detach().numpy()))
 
         return ret
 
@@ -47,7 +83,7 @@ class SimilarityGroupNorm(Module):
         groupSize = int(C / numGruops)
         input_no_h_w = channels_input.reshape(N, C, H * W)
 
-        if True:
+        if not global_vars.args.use_k_means:
             N, C, H = input_no_h_w.size()
             channel_dist = cat([input_no_h_w[i, :, :] for i in range(N)], dim=1)
             mean = channel_dist.mean(dim=1)

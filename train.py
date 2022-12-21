@@ -14,6 +14,8 @@ from torch.cuda import is_available, manual_seed as seed3
 from torch.backends.cudnn import deterministic, benchmark
 from torch.nn import CrossEntropyLoss, DataParallel
 from torch.optim import SGD
+import torch
+import numpy as np
 
 seed1(global_vars.args.seed)
 seed2(global_vars.args.seed)
@@ -80,25 +82,54 @@ def main():
         # adjust the learning rate
         schedulersStep(epoch)
 
-    for epoch in range(args.start_epoch, args.epochs):
+    for epoch in range(args.epochs):
+
+        #  When loading model form check-point - iterate the data in order to set the data to be
+        #  exact as the last checkpoint
+        get_to_start_epoch = False
+        if epoch < args.start_epoch:
+            get_to_start_epoch = True
+
         # # set the boolean to true if the norm layer is GN (for AGN layer).
         # before_shuffle = epoch < args.norm_shuffle
 
+        if epoch == 1 and global_vars.args.plot_std:
+            import matplotlib.pyplot as plt
+            z = [x for x in model.module.norm64.before_list]
+            # z = [*z[0], *z[1]]
+            plt.plot(z)
+
+            z = [x for x in model.module.norm64.after_list]
+            # z = [*z[0], *z[1]]
+            plt.plot(z)
+            # plt.plot(model.module.norm1.after_list)
+
+            MODELS_LOC = 'content\\'
+            plt.ylabel('STD (high is worse)')
+            plt.xlabel('Batch number')
+            plt.legend(['Before SGN', 'After SGN'])
+            plt.savefig(MODELS_LOC + 'one_class.png')
+
+            plt.show()
+            # plt.close()
+
         # train for one epoch and evaluate on validation set
-        train_loss, train_prc1, train_prc5 = train(train_loader, model, criterion, optimizer, epoch, reclustring_loader)
-        test_loss, test_prc1, test_prc5 = validate(val_loader, model, criterion, epoch)
+        train_loss, train_prc1, train_prc5 = train(train_loader, model, criterion, optimizer, epoch, reclustring_loader, get_to_start_epoch)
+        global_vars.recluster = False  # no need to recluster in validation
+        test_loss, test_prc1, test_prc5 = validate(val_loader, model, criterion, epoch, get_to_start_epoch)
 
-        # save epoch prcitions and losses
-        global_vars.save_results(train_loss, train_prc1, train_prc5, test_loss, test_prc1, test_prc5)
+        if not get_to_start_epoch:
+            # save epoch prcitions and losses
+            global_vars.save_results(train_loss, train_prc1, train_prc5, test_loss, test_prc1, test_prc5)
 
-        # adjust the learning rate
-        schedulersStep(epoch)
+            # adjust the learning rate
+            schedulersStep(epoch)
 
-        # save checkpoint
-        global_vars.save_checkpoint(model, optimizer, epoch)
+            # save checkpoint
+            global_vars.save_checkpoint(model, optimizer, epoch)
 
 
-def train(train_loader, model, criterion, optimizer, epoch, reclustring_loader):
+def train(train_loader, model, criterion, optimizer, epoch, reclustring_loader, get_to_start_epoch):
 
     batch_time = AverageMeter()
     data_time = AverageMeter()
@@ -113,66 +144,77 @@ def train(train_loader, model, criterion, optimizer, epoch, reclustring_loader):
 
     end = time()
     for i, (input, target) in enumerate(train_loader):
-        # set the recluster boolean (for RGN & SGN layers).
-        if global_vars.is_agn:
-            global_vars.recluster = (i == 0)  # and (epoch < global_vars.maxreclustring)
-            if global_vars.recluster:
+
+        if not get_to_start_epoch:
+            # set the recluster boolean (for RGN & SGN layers).
+            if global_vars.is_agn:
+                global_vars.recluster = (i == 0)  # and (epoch < global_vars.maxreclustring)
                 epoch_clustring_loop = epoch % global_vars.args.norm_shuffle
-                global_vars.recluster = (
-                                                    epoch_clustring_loop < global_vars.args.riar) and epoch < global_vars.args.max_norm_shuffle
-                global_vars.normalizationEpoch = epoch
-            else:
-                global_vars.recluster = False
-            # if global_vars.recluster:
-            #   # switch to evaluate mode
-            #   model.eval()
-            #   channelsReclustering(reclustring_loader, model, criterion, epoch)
-            #   global_vars.recluster = False
-            #   # switch to train mode
-            #   model.train()
+                if global_vars.recluster:
+                    global_vars.recluster = (
+                                                        epoch_clustring_loop < global_vars.args.riar) and epoch < global_vars.args.max_norm_shuffle
+                    global_vars.normalizationEpoch = epoch
+                else:
+                    global_vars.recluster = False
 
-        # measure data loading time
-        data_time.update(time() - end)
+                if global_vars.args.shuf_each_batch:
+                    global_vars.recluster = True
 
-        # compute output
-        output = model(input)
+                if global_vars.args.save_shuff_idxs and (epoch_clustring_loop < global_vars.args.riar):
+                    global_vars.recluster = True
 
-        if global_vars.device_name == 'cuda':
-            target = target.cuda(non_blocking=True)
-        loss = criterion(output, target)
+                # if global_vars.recluster:
+                #   # switch to evaluate mode
+                #   model.eval()
+                #   channelsReclustering(reclustring_loader, model, criterion, epoch)
+                #   global_vars.recluster = False
+                #   # switch to train mode
+                #   model.train()
 
-        # measure accuracy and record loss
-        prec1, prec5 = accuracy(output.data, target, topk=(1, 5))
-        losses.update(loss.item(), input.size(0))
-        top1.update(prec1.item(), input.size(0))
-        top5.update(prec5.item(), input.size(0))
+            # measure data loading time
+            data_time.update(time() - end)
 
-        # compute gradient and do SGD step
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+            # compute output
+            model.module.batch_num = i
+            output = model(input)
 
-        # measure elapsed time
-        batch_time.update(time() - end)
-        end = time()
+            if global_vars.device_name == 'cuda':
+                target = target.cuda(non_blocking=True)
+            loss = criterion(output, target)
 
-        if i % print_freq == 0:
-            print('Train:\t[{0}][{1}/{2}]\t'
-                  'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-                  'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
-                  'Prec@1 {top1.val:.3f} ({top1.avg:.3f})\t'
-                  'Prec@5 {top5.val:.3f} ({top5.avg:.3f})'.format(
-                epoch, i, len(train_loader), batch_time=batch_time, loss=losses, top1=top1, top5=top5))
+            # measure accuracy and record loss
+            prec1, prec5 = accuracy(output.data, target, topk=(1, 5))
+            losses.update(loss.item(), input.size(0))
+            top1.update(prec1.item(), input.size(0))
+            top5.update(prec5.item(), input.size(0))
 
-    print(
-        'Train:\t[{0}]\tLoss {loss.avg:.4f}\tPrec@1 {top1.avg:.3f}\tPrec@5 {top5.avg:.3f}\n'.format(epoch, loss=losses,
-                                                                                                    top1=top1,
-                                                                                                    top5=top5))
+            # compute gradient and do SGD step
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            # measure elapsed time
+            batch_time.update(time() - end)
+            end = time()
+
+            if i % print_freq == 0:
+                print('Train:\t[{0}][{1}/{2}]\t'
+                      'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
+                      'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
+                      'Prec@1 {top1.val:.3f} ({top1.avg:.3f})\t'
+                      'Prec@5 {top5.val:.3f} ({top5.avg:.3f})'.format(
+                    epoch, i, len(train_loader), batch_time=batch_time, loss=losses, top1=top1, top5=top5))
+
+    if not get_to_start_epoch:
+        print(
+            'Train:\t[{0}]\tLoss {loss.avg:.4f}\tPrec@1 {top1.avg:.3f}\tPrec@5 {top5.avg:.3f}\n'.format(epoch, loss=losses,
+                                                                                                        top1=top1,
+                                                                                                        top5=top5))
 
     return losses.avg, top1.avg, top5.avg
 
 
-def validate(val_loader, model, criterion, epoch):
+def validate(val_loader, model, criterion, epoch, get_to_start_epoch):
     batch_time = AverageMeter()
     losses = AverageMeter()
     top1 = AverageMeter()
@@ -184,36 +226,59 @@ def validate(val_loader, model, criterion, epoch):
     model.eval()
 
     end = time()
+
+    from sklearn.metrics import confusion_matrix
+    import torch as torch
+    import seaborn as sn
+    import pandas as pd
+    import numpy as np
+
+    y_pred = []
+    y_true = []
+
     for i, (input, target) in enumerate(val_loader):
-        if global_vars.device_name == 'cuda':
-            target = target.cuda(non_blocking=True)
+        if not get_to_start_epoch:
+            if global_vars.device_name == 'cuda':
+                target = target.cuda(non_blocking=True)
 
-        # compute output
-        with no_grad():
-            output = model(input)
-            loss = criterion(output, target)
+            # compute output
+            with no_grad():
+                output = model(input)
 
-        # measure accuracy and record loss
-        prec1, prec5 = accuracy(output.data, target, topk=(1, 5))
-        losses.update(loss.item(), input.size(0))
-        top1.update(prec1.item(), input.size(0))
-        top5.update(prec5.item(), input.size(0))
+                output_for_conf = (torch.max(torch.exp(output), 1)[1]).data.cpu().numpy()
+                y_pred.extend(output_for_conf)
 
-        # measure elapsed time
-        batch_time.update(time() - end)
-        end = time()
+                labels_for_conf = target.data.cpu().numpy()
+                y_true.extend(labels_for_conf)
 
-        if i % print_freq == 0:
-            print('Test:\t[{0}][{1}/{2}]\t'
-                  'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-                  'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
-                  'Prec@1 {top1.val:.3f} ({top1.avg:.3f})\t'
-                  'Prec@5 {top5.val:.3f} ({top5.avg:.3f})'.format(
-                epoch, i, len(val_loader), batch_time=batch_time, loss=losses, top1=top1, top5=top5))
+                loss = criterion(output, target)
 
-    print('Test:\t[{0}]\tLoss {loss.avg:.4f}\tPrec@1 {top1.avg:.3f}\tPrec@5 {top5.avg:.3f}\n'.format(epoch, loss=losses,
-                                                                                                     top1=top1,
-                                                                                                     top5=top5))
+            # measure accuracy and record loss
+            prec1, prec5 = accuracy(output.data, target, topk=(1, 5))
+            losses.update(loss.item(), input.size(0))
+            top1.update(prec1.item(), input.size(0))
+            top5.update(prec5.item(), input.size(0))
+
+            # measure elapsed time
+            batch_time.update(time() - end)
+            end = time()
+
+            if i % print_freq == 0:
+                print('Test:\t[{0}][{1}/{2}]\t'
+                      'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
+                      'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
+                      'Prec@1 {top1.val:.3f} ({top1.avg:.3f})\t'
+                      'Prec@5 {top5.val:.3f} ({top5.avg:.3f})'.format(
+                    epoch, i, len(val_loader), batch_time=batch_time, loss=losses, top1=top1, top5=top5))
+
+    if not get_to_start_epoch:
+        classes = ('poppy', 'chair')
+        cf_matrix = confusion_matrix(y_true, y_pred)
+        print(cf_matrix)
+
+        print('Test:\t[{0}]\tLoss {loss.avg:.4f}\tPrec@1 {top1.avg:.3f}\tPrec@5 {top5.avg:.3f}\n'.format(epoch, loss=losses,
+                                                                                                         top1=top1,
+                                                                                                         top5=top5))
 
     return losses.avg, top1.avg, top5.avg
 

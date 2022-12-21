@@ -58,8 +58,15 @@ parser.add_argument('--seed', default=0, type=int,
                     help='fix all random behivers to random state (default: 0)')
 parser.add_argument('--GN-in-bt', default=False, action="store_true",
                     help='Even if RGN/SGN is set, run GN in the bottle-neck')
-
+parser.add_argument('--use-k-means', default=False, action="store_true",
+                    help='use k-means algo when norm method is SGN')
+parser.add_argument('--shuf_each_batch', default=False, action="store_true",
+                    help='re-cluster the channels each batch')
 parser.add_argument('--classes_to_train', nargs='+', default=[], help='two names of classes (like bear/wolf')
+parser.add_argument('--plot_std', default=False, action="store_true",
+                    help='plot std for first batch')
+parser.add_argument('--save_shuff_idxs', default=False, action="store_true",
+                    help='Save shuffle indexes of the full epoch and apply them on the rest of the epoch')
 
 # set global_vars free variables
 args = parser.parse_args()

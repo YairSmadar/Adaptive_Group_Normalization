@@ -8,8 +8,12 @@ from numpy.ma.core import append
 
 from argparse import ArgumentParser
 
+# MODELS_LOC = "/content/drive/MyDrive/AGN/saved_models/"
+MODELS_LOC = r'C:\a_work\CS2\Adaptive-Norm\latest-python-code\exp\\'
+
+
 parser = ArgumentParser(description='plot results')
-parser.add_argument('--models_dir_path', default="/content/drive/MyDrive/AGN/saved_models/", type=str)
+parser.add_argument('--models_dir_path', default=MODELS_LOC, type=str)
 args = parser.parse_args()
 
 data = {'description': [],
@@ -25,7 +29,13 @@ df = pd.DataFrame(data=data)
 
 top1s, losses, methods, descriptions = [], [], [], []
 for file in glob.glob(args.models_dir_path + '**/*.tar', recursive=True):
-    file_array_of_names = file.split('/')[-1].split('_')
+
+    if '\\' in file:
+        file_array_of_names = file.split('\\')[-1].split('_')
+    elif '/' in file:
+        file_array_of_names = file.split('/')[-1].split('_')
+    else:
+        file_array_of_names = file.split('_')
 
     method = file_array_of_names[1] + file_array_of_names[5]
     if 'GN' in method and not 'SGN' in method and not 'RGN' in method:
@@ -49,13 +59,13 @@ for file in glob.glob(args.models_dir_path + '**/*.tar', recursive=True):
     append_list = [file.split('/')[-1], method, lr, top1_max, argmax, top1_last, average_5, current_length]
     df = df.append(pd.Series(append_list, index=df.columns), ignore_index=True)
 
-df.to_csv(r'/content/df.csv')
+df.to_csv(MODELS_LOC + 'df.csv')
 
 [plt.plot(top1) for top1 in top1s]
 plt.ylabel('accuracy')
 plt.xlabel('epoch')
 plt.legend(methods)
-plt.savefig('/content/accuracy.png')
+plt.savefig(MODELS_LOC + 'accuracy.png')
 plt.show()
 plt.close()
 
@@ -63,6 +73,6 @@ plt.close()
 plt.ylabel('loss')
 plt.xlabel('epoch')
 plt.legend(methods)
-plt.savefig('/content/losses.png')
+plt.savefig(MODELS_LOC + 'losses.png')
 plt.show()
 plt.close()
