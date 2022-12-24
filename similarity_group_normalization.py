@@ -28,72 +28,94 @@ class SimilarityGroupNorm(Module):
         self.before_list = []
         self.after_list = []
 
-        if global_vars.args.save_shuff_idxs:
-            self.batch_layer_index = {}
+        self.batch_layer_index = {}
 
-    def forward(self, Conv_input, batch_num: int):
+    def forward(self, Conv_input, batch_num: int = -1):
+        N, C, H, W = Conv_input.size()
 
-        if global_vars.args.plot_std:
-            N, C, H, W = Conv_input.size()
-            group_size = int(C / self.num_groups)
-            input_no_h_w = Conv_input.reshape(N, C, H * W)
-            channel_dist = cat([input_no_h_w[i, :, :] for i in range(N)], dim=1)
-            channel_dist_by_groups = cat([channel_dist[i:i+group_size, :].unsqueeze(0) for i in range(int(C/group_size))], dim=0)
-            std_before = channel_dist_by_groups.reshape(int(C/group_size), -1).std(dim=1)
-
-            self.before_list.append(np.sum(std_before.cpu().detach().numpy()))
+        # if global_vars.args.plot_std:
+        #     group_size = int(C / self.num_groups)
+        #     input_no_h_w = Conv_input.reshape(N, C, H * W)
+        #     channel_dist = cat([input_no_h_w[i, :, :] for i in range(N)], dim=1)
+        #     channel_dist_by_groups = cat([channel_dist[i:i+group_size, :].unsqueeze(0) for i in range(int(C/group_size))], dim=0)
+        #     std_before = channel_dist_by_groups.reshape(int(C/group_size), -1).std(dim=1)
+        #
+        #     self.before_list.append(np.sum(std_before.cpu().detach().numpy()))
 
         if global_vars.recluster:
             self.recluster(Conv_input)
-            self.batch_layer_index[batch_num] = (self.indexes, self.reverse_indexes)
+            self.batch_layer_index[batch_num] = (self.indexes.clone(), self.reverse_indexes.clone())
             # raise Exception("stop")
 
+        Conv_input_reshaped = Conv_input.reshape(N * C, W * H)
+
+        # if batch_num == 155:
+        #     print()
+        t = time.time()
         if global_vars.args.save_shuff_idxs:
-            if batch_num == 31:
-                print()
-            ret = self.groupNorm(Conv_input[:, self.batch_layer_index[batch_num][0], :, :])[:, self.batch_layer_index[batch_num][1], :, :].requires_grad_(
-                requires_grad=True)
+            Conv_input_new_idx = Conv_input_reshaped[self.batch_layer_index[batch_num][0], :]
+            Conv_input_new_idx_norm = self.groupNorm(Conv_input_new_idx.reshape(N, C, H, W))
+            Conv_input_new_idx_norm = Conv_input_new_idx_norm.reshape(N*C, W*H)
+            Conv_input_orig_idx_norm = Conv_input_new_idx_norm[self.batch_layer_index[batch_num][1], :]
+            ret = Conv_input_orig_idx_norm.reshape(N, C, H, W).requires_grad_(requires_grad=True)
         else:
-            ret = self.groupNorm(Conv_input[:, self.indexes, :, :])[:, self.reverse_indexes, :, :].requires_grad_(
-                requires_grad=True)
+            Conv_input_new_idx = Conv_input_reshaped[self.indexes, :]
+            Conv_input_new_idx_norm = self.groupNorm(Conv_input_new_idx.reshape(N, C, H, W))
+            Conv_input_new_idx_norm = Conv_input_new_idx_norm.reshape(N*C, W*H)
+            Conv_input_orig_idx_norm = Conv_input_new_idx_norm[self.reverse_indexes, :]
+            ret = Conv_input_orig_idx_norm.reshape(N, C, H, W).requires_grad_(requires_grad=True)
 
-        if global_vars.args.plot_std:
-            input_no_h_w = Conv_input[:, self.indexes, :, :].reshape(N, C, H * W)
-            channel_dist = cat([input_no_h_w[i, :, :] for i in range(N)], dim=1)
-            channel_dist_by_groups = cat([channel_dist[i:i+group_size, :].unsqueeze(0) for i in range(int(C/group_size))], dim=0)
-            std_after = channel_dist_by_groups.reshape(int(C/group_size), -1).std(dim=1)
-            self.after_list.append(np.sum(std_after.cpu().detach().numpy()))
+        # print(f"norm time {time.time() - t}")
 
-            print("std before - after:", np.sum((std_before - std_after).cpu().detach().numpy()))
+
+        # if global_vars.args.plot_std:
+        #     input_no_h_w = Conv_input[:, self.indexes, :, :].reshape(N, C, H * W)
+        #     channel_dist = cat([input_no_h_w[i, :, :] for i in range(N)], dim=1)
+        #     channel_dist_by_groups = cat([channel_dist[i:i+group_size, :].unsqueeze(0) for i in range(int(C/group_size))], dim=0)
+        #     std_after = channel_dist_by_groups.reshape(int(C/group_size), -1).std(dim=1)
+        #     self.after_list.append(np.sum(std_after.cpu().detach().numpy()))
+        #
+        #     print("std before - after:", np.sum((std_before - std_after).cpu().detach().numpy()))
 
         return ret
 
     def recluster(self, Conv_input):
-        # s = time.time()
+        N, C, W, H = Conv_input.size()
+        t = time.time()
         self.indexes = self.SimilarityGroupNormClustering(clone(Conv_input), self.num_groups, self.layer_index).to(
             dtype=torch.int64)
-        # print(f"SimilarityGroupNormClustering time = {time.time() - s}")
-        #         self.indexes = better_places(self.indexes, self.num_groups, self.group_size, self.num_channels)
+        # print(f"SimilarityGroupNormClustering time {time.time() - t}")
+
         self.reverse_indexes = empty_like(self.indexes)
-        for ind in range(Conv_input.size()[1]):
+        for ind in range(N*C):
             self.reverse_indexes[self.indexes[ind]] = tensor(ind, device=global_vars.device)
 
     def SimilarityGroupNormClustering(self, channels_input, numGruops, layerIndex):
         N, C, H, W = channels_input.size()
         groupSize = int(C / numGruops)
-        input_no_h_w = channels_input.reshape(N, C, H * W)
+        input_no_h_w = channels_input.reshape(N * C, H * W)
 
         if not global_vars.args.use_k_means:
-            N, C, H = input_no_h_w.size()
-            channel_dist = cat([input_no_h_w[i, :, :] for i in range(N)], dim=1)
+            # N, C, H = input_no_h_w.size()
+            channel_dist = input_no_h_w #cat([input_no_h_w[:, i, :] for i in range(C)], dim=1)
             mean = channel_dist.mean(dim=1)
-            # var = channel_dist.var(dim=1)
-            mean_plus_var = mean  # + var
-            sorted_indexes = sorted(range(len(mean_plus_var)), key=lambda k: mean_plus_var[k])
-            channelsClustering = zeros_like(mean_plus_var, device=global_vars.device)
-            for g in range(numGruops):
-                for i in range(groupSize):
-                    channelsClustering[sorted_indexes[g * groupSize + i]] = g * groupSize + i
+            var = channel_dist.var(dim=1)
+            sort_metric = (mean / var) * (mean + var)
+            sorted_indexes = sorted(range(len(sort_metric)), key=lambda k: sort_metric[k])
+
+            if global_vars.args.far_groups:
+                endlist = [[] for _ in range(numGruops)]
+                for index, item in enumerate(sorted_indexes):
+                    endlist[index % numGruops].append(item)
+
+                new_list = []
+                for i in range(len(endlist)):
+                    new_list = new_list + endlist[i]
+
+                sorted_indexes = new_list
+            channelsClustering = torch.Tensor(sorted_indexes)  # zeros_like(sort_metric, device=global_vars.device)
+
+
         else:
             clf = KMeansConstrained(
                 n_clusters=int(numGruops),
@@ -106,7 +128,7 @@ class SimilarityGroupNorm(Module):
             np_df = norm_df.detach().cpu().numpy()
             s = time.time()
             np_clusters = clf.fit_predict(np_df)
-            print(f"fit_predict time = {time.time() - s}")
+            # print(f"fit_predict time = {time.time() - s}")
             clusters = tensor(np_clusters, device=global_vars.device)
 
             indexes = sort(clusters)[1]

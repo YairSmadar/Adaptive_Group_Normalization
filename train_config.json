@@ -1,0 +1,22 @@
+{
+  "_model_version": 1,
+  "_code_version": 1,
+  "method": "SGN",
+  "epochs": 100,
+  "batch_size": 16,
+  "learning_rate": 0.001,
+  "group_norm": 16,
+  "norm_shuffle": 10,
+  "riar": 1,
+  "print_freq": 1250,
+  "saveing_path": "/content/drive/MyDrive/AGN/saved_models/",
+  "seed": 0,
+  "shuf_each_batch": false,
+  "far_groups": true,
+  "group_by_size": true,
+  "group-norm-size": 16,
+  "classes_to_train":
+  [
+
+  ]
+}

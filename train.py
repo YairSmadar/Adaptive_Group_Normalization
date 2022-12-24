@@ -176,6 +176,7 @@ def train(train_loader, model, criterion, optimizer, epoch, reclustring_loader, 
 
             # compute output
             model.module.batch_num = i
+            global_vars.batch_num = i
             output = model(input)
 
             if global_vars.device_name == 'cuda':
@@ -214,7 +215,7 @@ def train(train_loader, model, criterion, optimizer, epoch, reclustring_loader, 
     return losses.avg, top1.avg, top5.avg
 
 
-def validate(val_loader, model, criterion, epoch, get_to_start_epoch):
+def validate(val_loader, model, criterion, epoch, get_to_start_epoch=False):
     batch_time = AverageMeter()
     losses = AverageMeter()
     top1 = AverageMeter()
@@ -274,7 +275,7 @@ def validate(val_loader, model, criterion, epoch, get_to_start_epoch):
     if not get_to_start_epoch:
         classes = ('poppy', 'chair')
         cf_matrix = confusion_matrix(y_true, y_pred)
-        print(cf_matrix)
+        # print(cf_matrix)
 
         print('Test:\t[{0}]\tLoss {loss.avg:.4f}\tPrec@1 {top1.avg:.3f}\tPrec@5 {top5.avg:.3f}\n'.format(epoch, loss=losses,
                                                                                                          top1=top1,

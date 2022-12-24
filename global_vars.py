@@ -1,7 +1,14 @@
+import logging
+
 from torch import device, Generator, save, load
 from torch.cuda import is_available
 from argparse import ArgumentParser
 from copy import deepcopy
+from argparse import Namespace
+from copy import copy
+import json
+import shutil
+import os
 
 parser = ArgumentParser(description='PyTorch GN\AGN Training')
 parser.add_argument('--dataset', default="CIFAR100", type=str,
@@ -67,9 +74,44 @@ parser.add_argument('--plot_std', default=False, action="store_true",
                     help='plot std for first batch')
 parser.add_argument('--save_shuff_idxs', default=False, action="store_true",
                     help='Save shuffle indexes of the full epoch and apply them on the rest of the epoch')
+parser.add_argument('--far_groups', default=False, action="store_true",
+                    help='Instead of group as close channels, group as far channels')
+parser.add_argument('--config', type=str, default='',
+                    help='path to json file of training configuration')
+
+
+def apply_config(args: Namespace, config_path: str):
+    """Overwrite the values in an arguments object by values of namesake
+    keys in a JSON config file.
+
+    :param args: The arguments object
+    :param config_path: the path to a config JSON file.
+    """
+    config_path = copy(config_path)
+    # delattr(args, 'config')
+    if config_path:
+        # Opening JSON file
+        f = open(config_path)
+        config_overwrite = json.load(f)
+        for k, v in config_overwrite.items():
+            if k.startswith('_'):
+                continue
+            setattr(args, k, v)
+
+
+def save_config_in_saving_path(args):
+    if args.saveing_path and os.path.exists(args.saveing_path) and args.config != "" and os.path.exists(args.config):
+        shutil.copyfile(args.config, os.path.join(args.saveing_path, f"config_{args.method}.json"))
+
 
 # set global_vars free variables
 args = parser.parse_args()
+
+apply_config(args, args.config)
+
+save_config_in_saving_path(args)
+
+
 is_agn = args.method == "RGN" or args.method == "SGN"
 device_name = 'cuda' if is_available() else 'cpu'
 device = device(device_name)
@@ -82,11 +124,13 @@ best_prec1 = 0
 normalizationEpoch = 0
 generator = Generator()
 generator.manual_seed(args.seed)
+batch_num = 0
 
 # initialize the results arrays
 train_prcition1, train_prcition5 = [], []
 test_prcition1, test_prcition5 = [], []
 train_losses, test_losses = [], []
+
 
 
 def save_results(train_loss, train_prc1, train_prc5, test_loss, test_prc1, test_prc5):
@@ -181,6 +225,8 @@ def init_saveing_path():
     args.saveing_path = args.saveing_path + '_{}seed'.format(args.seed)
     args.saveing_path = args.saveing_path + '_{}maxreclustring'.format(args.max_norm_shuffle)
     args.saveing_path = args.saveing_path + '_{}'.format(args.scheduler_name)
+    if args.far_groups:
+        args.saveing_path = args.saveing_path + '_far_groups'
     args.saveing_path = args.saveing_path + '.tar'
 
 

@@ -45,6 +45,12 @@ for file in glob.glob(args.models_dir_path + '**/*.tar', recursive=True):
     method += ' lr ' + lr
     riar = file_array_of_names[6][:1]
     method += ' riar ' + riar
+
+    far_groups = file_array_of_names[-1]
+
+    if "far_groups" in far_groups:
+        method += ' far_groups'
+
     loaded_model = torch.load(file, map_location=torch.device('cpu'))
     top1_max = max(loaded_model['test_prcition1'])
     argmax = np.argmax(loaded_model['test_prcition1'])

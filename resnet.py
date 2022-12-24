@@ -22,6 +22,7 @@ class ResNet(nn.Module):
         self.group_norm = global_vars.args.group_norm
         self.inplanes = 64
         self.normLayers = []
+        self.batch_num = 0
 
         self.conv1 = nn.Conv2d(3, 64, kernel_size=4, stride=1, bias=False)
         self.norm1 = norm2d(64)
@@ -35,7 +36,6 @@ class ResNet(nn.Module):
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2, ac_gn=global_vars.args.GN_in_bt)
         self.avgpool = nn.AvgPool2d(4, stride=1)
         self.fc = nn.Linear(512 * block.expansion, num_classes)
-        self.batch_num = 0
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -95,7 +95,7 @@ class ResNet(nn.Module):
         if stride != 1 or self.inplanes != planes * block.expansion:
             downsample = nn.Sequential(
                 nn.Conv2d(self.inplanes, planes * block.expansion, kernel_size=1, stride=stride, bias=False),
-                # norm2d(planes * block.expansion),
+                norm2d(planes * block.expansion, self.batch_num),
             )
         layers = []
         layers.append(block(self.inplanes, planes, self.group_norm, self.method, stride, downsample, ac_gn))
@@ -106,21 +106,27 @@ class ResNet(nn.Module):
 
     def forward(self, x):
         x = self.conv1(x)
+
         if global_vars.is_agn:
             x = self.norm1(x, self.batch_num)
         else:
             x = self.norm1(x)
+
         x = self.relu(x)
         x = self.layer1(x)
-        if global_vars.is_agn:
-            x = self.norm256(x, self.batch_num)
-        else:
-            x = self.norm256(x)
+
+        # if global_vars.is_agn:
+        #     x = self.norm256(x, self.batch_num)
+        # else:
+        #     x = self.norm256(x)
+
         x = self.layer2(x)
-        if global_vars.is_agn:
-            x = self.norm512(x, self.batch_num)
-        else:
-            x = self.norm512(x)
+
+        # if global_vars.is_agn:
+        #     x = self.norm512(x, self.batch_num)
+        # else:
+        #     x = self.norm512(x)
+
         x = self.layer3(x)
         x = self.layer4(x)
         x = self.avgpool(x)
@@ -147,13 +153,28 @@ class Bottleneck(nn.Module):
     def forward(self, x):
         residual = x
         out = self.conv1(x)
-        # out = self.norm1(out)
+
+        if global_vars.is_agn:
+            out = self.norm1(out, global_vars.batch_num)
+        else:
+            out = self.norm1(out)
+
         out = self.relu(out)
         out = self.conv2(out)
-        # out = self.norm2(out)
+
+        if global_vars.is_agn:
+            out = self.norm2(out, global_vars.batch_num)
+        else:
+            out = self.norm2(out)
+
         out = self.relu(out)
         out = self.conv3(out)
-        # out = self.norm3(out)
+
+        if global_vars.is_agn:
+            out = self.norm3(out, global_vars.batch_num)
+        else:
+            out = self.norm3(out)
+
         if self.downsample is not None:
             residual = self.downsample(x)
         out += residual
