@@ -26,8 +26,8 @@ class ResNet(nn.Module):
 
         self.conv1 = nn.Conv2d(3, 64, kernel_size=4, stride=1, bias=False)
         self.norm1 = norm2d(64)
-        self.norm256 = norm2d(256)
-        self.norm512 = norm2d(512)
+        # self.norm256 = norm2d(256)
+        # self.norm512 = norm2d(512)
 
         self.relu = nn.ReLU(inplace=True)
         self.layer1 = self._make_layer(block, 64, layers[0])

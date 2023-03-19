@@ -69,7 +69,7 @@ def getLoaders(datasetName, gen):
         #     means_dic[i] = mean
         # sort_means_dict = dict(sorted(means_dic.items(), key=lambda item: item[1]))
 
-        if len(global_vars.args.classes_to_train) > 0:
+        if len(global_vars.args.classes_to_train) > 0 and 'all' not in global_vars.args.classes_to_train:
 
             train_list = []
             test_list = []

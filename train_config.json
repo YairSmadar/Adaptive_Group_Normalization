@@ -1,6 +1,7 @@
 {
-  "_model_version": 1,
-  "_code_version": 1,
+  "model_version": 1,
+  "SGN_version": 6,
+  "RGN_version": 1,
   "method": "SGN",
   "epochs": 100,
   "batch_size": 16,
@@ -10,13 +11,14 @@
   "riar": 1,
   "print_freq": 1250,
   "saveing_path": "/content/drive/MyDrive/AGN/saved_models/",
+  "load": "/content/drive/MyDrive/AGN/init_weight.pt",
   "seed": 0,
   "shuf_each_batch": false,
-  "far_groups": true,
   "group_by_size": true,
-  "group-norm-size": 16,
+  "group_norm_size": 16,
+  "use_wandb": false,
   "classes_to_train":
   [
-
+    "all"
   ]
 }
