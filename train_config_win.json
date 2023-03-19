@@ -1,0 +1,27 @@
+{
+  "model_version": 1,
+  "SGN_version": 7,
+  "RGN_version": 1,
+  "method": "SGN",
+  "epochs": 100,
+  "batch_size": 16,
+  "learning_rate": 0.001,
+  "group_norm": 16,
+  "norm_shuffle": 10,
+  "riar": 1,
+  "print_freq": 25,
+  "saveing_path": "res",
+  "seed": 0,
+  "shuf_each_batch": false,
+  "group_by_size": true,
+  "use_wandb": false,
+  "group_norm_size": 16,
+  "plot_std": false,
+  "classes_to_train":
+  [
+    "apple",
+    "bear",
+    "raccoon",
+    "ray"
+  ]
+}
