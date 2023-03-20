@@ -1,3 +1,8 @@
+import global_vars
+
+if global_vars.args.use_wandb:
+    import wandb
+    wandb.init(project="Adaptive_Normalization", entity="the-smadars")
 from copy import deepcopy
 from os.path import isfile
 from time import time
@@ -6,7 +11,6 @@ from torch._C import device
 from resnet import resnet50
 from scedulers import setSchedulers, schedulersStep
 from data_loading import getLoaders
-import global_vars
 
 from torch import use_deterministic_algorithms, load, no_grad
 from torch.random import manual_seed as seed2
@@ -29,6 +33,13 @@ use_deterministic_algorithms(True)
 def main():
 
     args = global_vars.args
+
+    if global_vars.args.use_wandb:
+        wandb.config = {
+            "learning_rate": args.lr,
+            "epochs": args.epochs,
+            "batch_size": args.batch_size
+        }
 
     # print parameters
     global_vars.printParameters()
@@ -56,7 +67,7 @@ def main():
         # load & save the model initial weights 
         if args.load != None:
             print("loading weights from:", args.load)
-            State_dict = load(args.load)['state_dict']
+            State_dict = load(args.load, map_location=torch.device(global_vars.device_name))['state_dict']
             with no_grad():
                 for param1, param2 in zip(model.state_dict(), State_dict):
                     model.state_dict()[param1].data.fill_(0).add_(State_dict[param2].data)
@@ -95,11 +106,11 @@ def main():
 
         if epoch == 1 and global_vars.args.plot_std:
             import matplotlib.pyplot as plt
-            z = [x for x in model.module.norm64.before_list]
+            z = [x for x in model.module.norm1.before_list]
             # z = [*z[0], *z[1]]
             plt.plot(z)
 
-            z = [x for x in model.module.norm64.after_list]
+            z = [x for x in model.module.norm1.after_list]
             # z = [*z[0], *z[1]]
             plt.plot(z)
             # plt.plot(model.module.norm1.after_list)
@@ -206,11 +217,19 @@ def train(train_loader, model, criterion, optimizer, epoch, reclustring_loader, 
                       'Prec@5 {top5.val:.3f} ({top5.avg:.3f})'.format(
                     epoch, i, len(train_loader), batch_time=batch_time, loss=losses, top1=top1, top5=top5))
 
+
+            # Optional
+            if global_vars.args.use_wandb:
+                wandb.watch(model)
+
     if not get_to_start_epoch:
         print(
             'Train:\t[{0}]\tLoss {loss.avg:.4f}\tPrec@1 {top1.avg:.3f}\tPrec@5 {top5.avg:.3f}\n'.format(epoch, loss=losses,
                                                                                                         top1=top1,
                                                                                                         top5=top5))
+        if global_vars.args.use_wandb:
+            wandb.log({"train loss": losses.avg})
+            wandb.log({"train accuracy": top1.avg})
 
     return losses.avg, top1.avg, top5.avg
 
@@ -279,7 +298,11 @@ def validate(val_loader, model, criterion, epoch, get_to_start_epoch=False):
 
         print('Test:\t[{0}]\tLoss {loss.avg:.4f}\tPrec@1 {top1.avg:.3f}\tPrec@5 {top5.avg:.3f}\n'.format(epoch, loss=losses,
                                                                                                          top1=top1,
-                                                                                                         top5=top5))
+                                                                                                        top5=top5))
+
+        if global_vars.args.use_wandb:
+            wandb.log({"test loss": losses.avg})
+            wandb.log({"test accuracy": top1.avg})
 
     return losses.avg, top1.avg, top5.avg
 
@@ -332,8 +355,6 @@ def accuracy(output, target, topk=(1,)):
 
 
 if __name__ == '__main__':
-    t = time()
     main()
-    print(f"DONE!!! train total time (min) = {(time() - t)/60}")
 
 
