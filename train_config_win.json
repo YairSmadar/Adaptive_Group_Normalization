@@ -1,6 +1,6 @@
 {
   "model_version": 1,
-  "SGN_version": 7,
+  "SGN_version": 8,
   "RGN_version": 1,
   "method": "SGN",
   "epochs": 100,
@@ -14,9 +14,11 @@
   "seed": 0,
   "shuf_each_batch": false,
   "group_by_size": true,
-  "use_wandb": false,
+  "use_wandb": true,
   "group_norm_size": 16,
   "plot_std": false,
+  "epoch_start_cluster": 0,
+  "cluster_last_batch": true,
   "classes_to_train":
   [
     "apple",

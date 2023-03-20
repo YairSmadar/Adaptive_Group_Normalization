@@ -82,7 +82,10 @@ parser.add_argument('--SGN_version', default=1, type=int,
                          '2: grouping as far channels, (mean/var)*(mean+var), range in group: numberOfChannels/groupSize'
                          '3: grouping as close channels, (mean/var)*(mean+var)'
                          '4: grouping as close channels, KMeans'
-                         '5: groups only in the same batch[i], (mean/var)*(mean+var)')
+                         '5: groups only in the same batch[i], (mean/var)*(mean+var)'
+                         '6: grouping as close channels, (std)'
+                         '7: grouping using diffusion maps'
+                         '8: grouping using harmonic mean')
 parser.add_argument('--RGN_version', default=1, type=int, help='RGN metric version.')
 parser.add_argument('--model_version', default=1, type=int,
                     help='Model version'
@@ -90,6 +93,11 @@ parser.add_argument('--model_version', default=1, type=int,
 parser.add_argument('--code_version', default=1, type=int, help='Code version')
 parser.add_argument('--use_wandb', default=False, action="store_true",
                     help='use weights&biases')
+parser.add_argument('--epoch_start_cluster', default=0,
+                    help='epoch number to start cluster from')
+parser.add_argument('--cluster_last_batch', default=False, action="store_true",
+                    help='when getting to epoch of clustering, cluster at'
+                         'last epoch. default=cluster in the first epoch')
 
 
 
@@ -148,6 +156,7 @@ normalizationEpoch = 0
 generator = Generator()
 generator.manual_seed(args.seed)
 batch_num = 0
+epoch_num = 0
 
 # initialize the results arrays
 train_prcition1, train_prcition5 = [], []

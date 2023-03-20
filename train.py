@@ -95,6 +95,7 @@ def main():
 
     for epoch in range(args.epochs):
 
+        global_vars.epoch_num = epoch
         #  When loading model form check-point - iterate the data in order to set the data to be
         #  exact as the last checkpoint
         get_to_start_epoch = False
@@ -154,33 +155,27 @@ def train(train_loader, model, criterion, optimizer, epoch, reclustring_loader, 
     model.train()
 
     end = time()
+    num_of_batches = len(train_loader.batch_sampler)
     for i, (input, target) in enumerate(train_loader):
 
         if not get_to_start_epoch:
             # set the recluster boolean (for RGN & SGN layers).
             if global_vars.is_agn:
-                global_vars.recluster = (i == 0)  # and (epoch < global_vars.maxreclustring)
+                if global_vars.args.cluster_last_batch:
+                    global_vars.recluster = (i == num_of_batches - 1)
+                else:
+                    global_vars.recluster = (i == 0)
                 epoch_clustring_loop = epoch % global_vars.args.norm_shuffle
                 if global_vars.recluster:
                     global_vars.recluster = (
                                                         epoch_clustring_loop < global_vars.args.riar) and epoch < global_vars.args.max_norm_shuffle
                     global_vars.normalizationEpoch = epoch
-                else:
-                    global_vars.recluster = False
 
                 if global_vars.args.shuf_each_batch:
                     global_vars.recluster = True
 
                 if global_vars.args.save_shuff_idxs and (epoch_clustring_loop < global_vars.args.riar):
                     global_vars.recluster = True
-
-                # if global_vars.recluster:
-                #   # switch to evaluate mode
-                #   model.eval()
-                #   channelsReclustering(reclustring_loader, model, criterion, epoch)
-                #   global_vars.recluster = False
-                #   # switch to train mode
-                #   model.train()
 
             # measure data loading time
             data_time.update(time() - end)
@@ -229,7 +224,7 @@ def train(train_loader, model, criterion, optimizer, epoch, reclustring_loader, 
                                                                                                         top5=top5))
         if global_vars.args.use_wandb:
             wandb.log({"train loss": losses.avg})
-            wandb.log({"train accuracy": top1.avg})
+            wandb.log({"train accuracy (top1)": top1.avg})
 
     return losses.avg, top1.avg, top5.avg
 
@@ -249,10 +244,6 @@ def validate(val_loader, model, criterion, epoch, get_to_start_epoch=False):
 
     from sklearn.metrics import confusion_matrix
     import torch as torch
-    import seaborn as sn
-    import pandas as pd
-    import numpy as np
-
     y_pred = []
     y_true = []
 

@@ -1,6 +1,6 @@
 {
   "model_version": 1,
-  "SGN_version": 6,
+  "SGN_version": 8,
   "RGN_version": 1,
   "method": "SGN",
   "epochs": 100,
@@ -17,6 +17,8 @@
   "group_by_size": true,
   "group_norm_size": 16,
   "use_wandb": false,
+  "epoch_start_cluster": 0,
+  "cluster_last_batch": true,
   "classes_to_train":
   [
     "all"

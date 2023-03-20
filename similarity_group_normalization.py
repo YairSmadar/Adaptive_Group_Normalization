@@ -3,22 +3,17 @@ import time
 
 import numpy as np
 import torch
-from k_means_constrained import KMeansConstrained
 from torch import clone, empty_like, tensor, sort, zeros_like, cat, ceil, floor
 from torch.nn import Module, GroupNorm
-from torch.nn.functional import normalize
-
 import global_vars
-from adaptive_group_norm import AdaptiveGroupNorm
 from agn_utils import getLayerIndex
-import arrange_tensor_channels
-import AGN
 np.set_printoptions(threshold=sys.maxsize)
+
+
 class SimilarityGroupNorm(Module):
     def __init__(self, num_groups: int, num_channels: int = 32, eps=1e-12):
         super(SimilarityGroupNorm, self).__init__()
         self.groupNorm = GroupNorm(num_groups, num_channels, eps=eps, affine=True)
-        self.AGN = AdaptiveGroupNorm(num_groups=num_groups, num_channels=num_channels, eps=eps)
         self.indexes = None
         self.reverse_indexes = None
         self.layer_index = getLayerIndex()
@@ -33,6 +28,10 @@ class SimilarityGroupNorm(Module):
         self.batch_layer_index = {}
 
     def forward(self, Conv_input, batch_num: int = -1):
+
+        if global_vars.args.epoch_start_cluster >= global_vars.epoch_num:
+            return self.groupNorm(Conv_input)
+
         N, C, H, W = Conv_input.size()
 
         if global_vars.args.plot_std:
@@ -45,20 +44,19 @@ class SimilarityGroupNorm(Module):
             self.batch_layer_index[batch_num] = (self.indexes.clone(), self.reverse_indexes.clone())
         Conv_input_reshaped = Conv_input.reshape(N * C, W * H)
 
-        if global_vars.args.save_shuff_idxs:
+        if global_vars.args.save_shuff_idxs:  # not used
             Conv_input_new_idx = Conv_input_reshaped[self.batch_layer_index[batch_num][0], :]
             Conv_input_new_idx_norm = self.groupNorm(Conv_input_new_idx.reshape(N, C, H, W))
             Conv_input_new_idx_norm = Conv_input_new_idx_norm.reshape(N*C, W*H)
             Conv_input_orig_idx_norm = Conv_input_new_idx_norm[self.batch_layer_index[batch_num][1], :]
-            ret = Conv_input_orig_idx_norm.reshape(N, C, H, W).requires_grad_(requires_grad=True)
         else:
             Conv_input_new_idx = Conv_input_reshaped[self.indexes, :]
             GN_input = Conv_input_new_idx.reshape(N, C, H, W)
-            # GN_input_cpp = AGN.arrange_tensor_channels(Conv_input, self.indexes)
             Conv_input_new_idx_norm = self.groupNorm(GN_input)
             Conv_input_new_idx_norm = Conv_input_new_idx_norm.reshape(N*C, W*H)
             Conv_input_orig_idx_norm = Conv_input_new_idx_norm[self.reverse_indexes, :]
-            ret = Conv_input_orig_idx_norm.reshape(N, C, H, W).requires_grad_(requires_grad=True)
+
+        ret = Conv_input_orig_idx_norm.reshape(N, C, H, W).requires_grad_(requires_grad=True)
 
         if global_vars.args.plot_std:
             N, C, H, W = ret.size()
@@ -86,15 +84,15 @@ class SimilarityGroupNorm(Module):
         groupSize = int(C / numGruops)
         # grouping as far channels, (mean/var)*(mean+var), range in group: numGruops
         if global_vars.args.SGN_version == 1:
-            channelsClustering = SortChannelsV1(channels_input, numGruops)
+            channelsClustering = self.SortChannelsV1(channels_input, numGruops)
 
         # grouping as far channels, (mean/var)*(mean+var), range in group: groupSize/numberOfChannels
         elif global_vars.args.SGN_version == 2:
-            channelsClustering = SortChannelsV2(channels_input, groupSize)
+            channelsClustering = self.SortChannelsV2(channels_input, groupSize)
 
         # grouping as close channels, (mean/var)*(mean+var)
         elif global_vars.args.SGN_version == 3:
-            channelsClustering = SortChannelsV3(channels_input, groupSize)
+            channelsClustering = self.SortChannelsV3(channels_input, groupSize)
 
         # grouping as close channels, KMeans
         elif global_vars.args.SGN_version == 4:
@@ -102,14 +100,18 @@ class SimilarityGroupNorm(Module):
 
         # groups only in the same batch[i], (mean/var)*(mean+var)
         elif global_vars.args.SGN_version == 5:
-            channelsClustering = SortChannelsV5(channels_input, numGruops)
+            channelsClustering = self.SortChannelsV5(channels_input, numGruops)
 
         elif global_vars.args.SGN_version == 6:
-            channelsClustering = SortChannelsV6(channels_input)
+            channelsClustering = self.SortChannelsV6(channels_input)
 
         # grouping using diffusion maps
         elif global_vars.args.SGN_version == 7:
             channelsClustering = self.SortChannelsV7(channels_input, numGruops)
+
+        # grouping using harmonic mean
+        elif global_vars.args.SGN_version == 8:
+            channelsClustering = self.SortChannelsV8(channels_input)
 
         else:
             print(f"SGN_version number {global_vars.args.SGN_version} is not available!")
@@ -146,7 +148,74 @@ class SimilarityGroupNorm(Module):
         #     norm_df[:, i] = normalize(norm_df[:, i], dim=-1, eps=self.eps)
         return norm_df, df
 
+    # grouping as far channels, (mean/var)*(mean+var), range in group: numGruops
+    def SortChannelsV1(self, channels_input, numGruops):
+        N, C, H, W = channels_input.size()
+        input_2_dim = channels_input.reshape(N * C, H * W)
+
+        channel_dist = input_2_dim  # cat([input_no_h_w[:, i, :] for i in range(C)], dim=1)
+        mean = channel_dist.mean(dim=1)
+        var = channel_dist.var(dim=1)
+        sort_metric = (mean / var) * (mean + var)
+        sorted_indexes = sorted(range(len(sort_metric)),
+                                key=lambda k: sort_metric[k])
+
+        endlist = [[] for _ in range(numGruops)]
+        for index, item in enumerate(sorted_indexes):
+            endlist[index % numGruops].append(item)
+
+        new_list = []
+        for i in range(len(endlist)):
+            new_list = new_list + endlist[i]
+
+        sorted_indexes = new_list
+        channelsClustering = torch.Tensor(sorted_indexes)  # zeros_like(
+        # sort_metric, device=global_vars.device)
+
+        return channelsClustering
+
+    # grouping as far channels, (mean/var)*(mean+var), range in group:
+    # numberOfChannels/groupSize
+    def SortChannelsV2(self, channels_input, groupSize):
+        N, C, H, W = channels_input.size()
+        input_2_dim = channels_input.reshape(N * C, H * W)
+        channel_dist = input_2_dim  # cat([input_no_h_w[:, i, :] for i in range(
+        # C)], dim=1)
+        mean = channel_dist.mean(dim=1)
+        var = channel_dist.var(dim=1)
+        sort_metric = (mean / var) * (mean + var)
+        sorted_indexes = sorted(range(len(sort_metric)),
+                                key=lambda k: sort_metric[k])
+        range_in_group = N * C // groupSize
+        endlist = [[] for _ in range(range_in_group)]
+        for index, item in enumerate(sorted_indexes):
+            endlist[index % range_in_group].append(item)
+
+        new_list = []
+        for i in range(len(endlist)):
+            new_list = new_list + endlist[i]
+
+        sorted_indexes = new_list
+        channelsClustering = torch.Tensor(sorted_indexes)  # zeros_like(
+        # sort_metric, device=global_vars.device)
+
+        return channelsClustering
+
+    # grouping as close channels, (mean/var)*(mean+var)
+    def SortChannelsV3(self, channels_input, groupSize):
+        N, C, H, W = channels_input.size()
+        input_2_dim = channels_input.reshape(N * C, H * W)
+        mean = input_2_dim.mean(dim=1)
+        var = input_2_dim.var(dim=1)
+        sort_metric = (mean / var) * (mean + var)
+        sorted_indexes = sorted(range(len(sort_metric)),
+                                key=lambda k: sort_metric[k])
+        channelsClustering = torch.Tensor(sorted_indexes)
+
+        return channelsClustering
+
     def SortChannelsV4(self, channels_input, numGruops):
+        from k_means_constrained import KMeansConstrained
         N, C, H, W = channels_input.size()
         input_no_h_w = channels_input.reshape(N * C, H * W)
         groupSize = int(C / numGruops)
@@ -167,6 +236,31 @@ class SimilarityGroupNorm(Module):
         for g in range(numGruops):
             for i in range(groupSize):
                 channelsClustering[indexes[g * groupSize + i]] = g * groupSize + i
+
+        return channelsClustering
+
+    # groups only in the same batch[i], (mean/var)*(mean+var)
+    def SortChannelsV5(self, channels_input, groupSize):
+        N, C, H, W = channels_input.size()
+        input_N_C_WH = channels_input.reshape(N, C, H * W)
+        mean = input_N_C_WH.mean(dim=2)
+        var = input_N_C_WH.var(dim=2)
+        sort_metric = (mean / var) * (mean + var)
+        channelsClustering = torch.Tensor()
+        for b in range(N):
+            channelsClustering = cat((channelsClustering, torch.Tensor(
+                sorted(range(len(sort_metric[b, :])),
+                       key=lambda k: sort_metric[b][k])) + (C * b)))
+        return channelsClustering
+
+    # grouping as close channels, (std)
+    def SortChannelsV6(self, channels_input):
+        N, C, H, W = channels_input.size()
+        input_2_dim = channels_input.reshape(N * C, H * W)
+        sort_metric = input_2_dim.std(dim=1)
+        sorted_indexes = sorted(range(len(sort_metric)),
+                                key=lambda k: sort_metric[k])
+        channelsClustering = torch.Tensor(sorted_indexes)
 
         return channelsClustering
 
@@ -198,94 +292,17 @@ class SimilarityGroupNorm(Module):
 
         return torch.from_numpy(sorted_indexes)
 
+    def SortChannelsV8(self, channels_input):
+        N, C, H, W = channels_input.size()
+        input_N_C_WH = channels_input.reshape(N * C, H * W)
+        mean = input_N_C_WH.mean(dim=1)
+        var = input_N_C_WH.var(dim=1)
 
-# grouping as far channels, (mean/var)*(mean+var), range in group: numGruops
-def SortChannelsV1(channels_input, numGruops):
-    N, C, H, W = channels_input.size()
-    input_2_dim = channels_input.reshape(N*C, H * W)
+        # harmonic mean
+        sort_metric = 2 * (mean * var) / (mean + var)
+        sorted_indexes = sorted(range(len(sort_metric)),
+                                key=lambda k: sort_metric[k])
+        channelsClustering = torch.Tensor(sorted_indexes)
 
-    channel_dist = input_2_dim  # cat([input_no_h_w[:, i, :] for i in range(C)], dim=1)
-    mean = channel_dist.mean(dim=1)
-    var = channel_dist.var(dim=1)
-    sort_metric = (mean / var) * (mean + var)
-    sorted_indexes = sorted(range(len(sort_metric)), key=lambda k: sort_metric[k])
+        return channelsClustering
 
-    endlist = [[] for _ in range(numGruops)]
-    for index, item in enumerate(sorted_indexes):
-        endlist[index % numGruops].append(item)
-
-    new_list = []
-    for i in range(len(endlist)):
-        new_list = new_list + endlist[i]
-
-    sorted_indexes = new_list
-    channelsClustering = torch.Tensor(sorted_indexes)  # zeros_like(
-    # sort_metric, device=global_vars.device)
-
-    return channelsClustering
-
-
-# grouping as far channels, (mean/var)*(mean+var), range in group:
-# numberOfChannels/groupSize
-def SortChannelsV2(channels_input, groupSize):
-    N, C, H, W = channels_input.size()
-    input_2_dim = channels_input.reshape(N * C, H * W)
-    channel_dist = input_2_dim  # cat([input_no_h_w[:, i, :] for i in range(
-    # C)], dim=1)
-    mean = channel_dist.mean(dim=1)
-    var = channel_dist.var(dim=1)
-    sort_metric = (mean / var) * (mean + var)
-    sorted_indexes = sorted(range(len(sort_metric)), key=lambda k: sort_metric[k])
-    range_in_group = N*C//groupSize
-    endlist = [[] for _ in range(range_in_group)]
-    for index, item in enumerate(sorted_indexes):
-        endlist[index % range_in_group].append(item)
-
-    new_list = []
-    for i in range(len(endlist)):
-        new_list = new_list + endlist[i]
-
-    sorted_indexes = new_list
-    channelsClustering = torch.Tensor(sorted_indexes)  # zeros_like(
-    # sort_metric, device=global_vars.device)
-
-    return channelsClustering
-
-
-# grouping as close channels, (mean/var)*(mean+var)
-def SortChannelsV3(channels_input, groupSize):
-    N, C, H, W = channels_input.size()
-    input_2_dim = channels_input.reshape(N * C, H * W)
-    mean = input_2_dim.mean(dim=1)
-    var = input_2_dim.var(dim=1)
-    sort_metric = (mean / var) * (mean + var)
-    sorted_indexes = sorted(range(len(sort_metric)), key=lambda k: sort_metric[k])
-    channelsClustering = torch.Tensor(sorted_indexes)
-
-    return channelsClustering
-
-
-# groups only in the same batch[i], (mean/var)*(mean+var)
-def SortChannelsV5(channels_input, groupSize):
-    N, C, H, W = channels_input.size()
-    input_N_C_WH = channels_input.reshape(N, C, H * W)
-    mean = input_N_C_WH.mean(dim=2)
-    var = input_N_C_WH.var(dim=2)
-    sort_metric = (mean / var) * (mean + var)
-    channelsClustering = torch.Tensor()
-    for b in range(N):
-        channelsClustering = cat((channelsClustering, torch.Tensor(sorted(range(len(sort_metric[b,:])), key=lambda k: sort_metric[b][k])) + (C*b)))
-    return channelsClustering
-
-
-# grouping as close channels, (std)
-def SortChannelsV6(channels_input):
-    N, C, H, W = channels_input.size()
-    input_2_dim = channels_input.reshape(N * C, H * W)
-    mean = input_2_dim.mean(dim=1)
-    std = input_2_dim.std(dim=1)
-    sort_metric = std
-    sorted_indexes = sorted(range(len(sort_metric)), key=lambda k: sort_metric[k])
-    channelsClustering = torch.Tensor(sorted_indexes)
-
-    return channelsClustering
