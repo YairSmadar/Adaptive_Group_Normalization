@@ -2,12 +2,10 @@ import global_vars
 
 if global_vars.args.use_wandb:
     import wandb
-    wandb.init(project="Adaptive_Normalization", entity="the-smadars")
 from copy import deepcopy
 from os.path import isfile
 from time import time
 from numpy.random import seed as seed1
-from torch._C import device
 from resnet import resnet50
 from scedulers import setSchedulers, schedulersStep
 from data_loading import getLoaders
@@ -15,11 +13,9 @@ from data_loading import getLoaders
 from torch import use_deterministic_algorithms, load, no_grad
 from torch.random import manual_seed as seed2
 from torch.cuda import is_available, manual_seed as seed3
-from torch.backends.cudnn import deterministic, benchmark
 from torch.nn import CrossEntropyLoss, DataParallel
 from torch.optim import SGD
 import torch
-import numpy as np
 
 seed1(global_vars.args.seed)
 seed2(global_vars.args.seed)
@@ -35,16 +31,10 @@ def main():
     args = global_vars.args
 
     if global_vars.args.use_wandb:
-        wandb.config = {
-            "learning_rate": args.lr,
-            "epochs": args.epochs,
-            "batch_size": args.batch_size,
-            "method": args.method,
-            "SGN_version": args.SGN_version,
-            "RGN_version": args.RGN_version,
-            "epoch_start_cluster": args.epoch_start_cluster,
-            "cluster_last_batch": args.cluster_last_batch
-        }
+        wandb.init(project="Adaptive_Normalization",
+                   entity="the-smadars",
+                   name=global_vars.generate_wandb_name(),
+                   config=args)
 
     # print parameters
     global_vars.printParameters()

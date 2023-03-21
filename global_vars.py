@@ -25,12 +25,16 @@ parser.add_argument('--start_epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
 parser.add_argument('-b', '--batch_size', default=32, type=int, metavar='N',
                     help='mini-batch size (default: 32)')
-parser.add_argument('-rbs', '--reclustring_bs', default=512, type=int, metavar='N',
+parser.add_argument('-rbs', '--reclustring_bs', default=512, type=int,
+                    metavar='N',
                     help='mini-batch size for channels reclustring (default: 2048)')
-parser.add_argument('--lr', '--learning_rate', default=0.01, type=float, metavar='LR',
+parser.add_argument('--lr', '--learning_rate', default=0.01, type=float,
+                    metavar='LR',
                     help='initial learning rate (default: 0.01)')
-parser.add_argument('--momentum', default=0.9, type=float, metavar='M', help='momentum')
-parser.add_argument('--eps', default=1e-12, type=float, help='normalization epsilon')
+parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
+                    help='momentum')
+parser.add_argument('--eps', default=1e-12, type=float,
+                    help='normalization epsilon')
 parser.add_argument('--group_by_size', default=False, type=bool,
                     help='if to normalize by group whith the same size')
 parser.add_argument('--group_norm', default=32, type=int,
@@ -59,7 +63,8 @@ parser.add_argument('--saveing_path', default=None, type=str,
                     help='the path you want to save the model weights after each training loop (default: None)')
 parser.add_argument('--resume', default=None, type=str, metavar='PATH',
                     help='path to latest checkpoint (default: none)')
-parser.add_argument('--scheduler_name', default="default", type=str, metavar='PATH',
+parser.add_argument('--scheduler_name', default="default", type=str,
+                    metavar='PATH',
                     help='for future scheduler selection (default: "default")')
 parser.add_argument('--seed', default=0, type=int,
                     help='fix all random behivers to random state (default: 0)')
@@ -69,7 +74,8 @@ parser.add_argument('--use_k_means', default=False, action="store_true",
                     help='use k-means algo when norm method is SGN')
 parser.add_argument('--shuf_each_batch', default=False, action="store_true",
                     help='re-cluster the channels each batch')
-parser.add_argument('--classes_to_train', nargs='+', default=[], help='two names of classes (like bear/wolf')
+parser.add_argument('--classes_to_train', nargs='+', default=[],
+                    help='two names of classes (like bear/wolf')
 parser.add_argument('--plot_std', default=False, action="store_true",
                     help='plot std for first batch')
 parser.add_argument('--save_shuff_idxs', default=False, action="store_true",
@@ -86,7 +92,8 @@ parser.add_argument('--SGN_version', default=1, type=int,
                          '6: grouping as close channels, (std)'
                          '7: grouping using diffusion maps'
                          '8: grouping using harmonic mean')
-parser.add_argument('--RGN_version', default=1, type=int, help='RGN metric version.')
+parser.add_argument('--RGN_version', default=1, type=int,
+                    help='RGN metric version.')
 parser.add_argument('--model_version', default=1, type=int,
                     help='Model version'
                          '1: Original ResNet50')
@@ -98,7 +105,6 @@ parser.add_argument('--epoch_start_cluster', default=0,
 parser.add_argument('--cluster_last_batch', default=False, action="store_true",
                     help='when getting to epoch of clustering, cluster at'
                          'last epoch. default=cluster in the first epoch')
-
 
 
 def apply_config(args: Namespace, config_path: str):
@@ -120,7 +126,9 @@ def apply_config(args: Namespace, config_path: str):
 
 
 def save_config_in_saving_path(args):
-    if args.saveing_path and os.path.exists(args.saveing_path) and args.config != "" and os.path.exists(args.config):
+    if args.saveing_path and os.path.exists(
+            args.saveing_path) and args.config != "" and os.path.exists(
+            args.config):
         version = ""
         if args.method == "SGN":
             version = f"_V{args.SGN_version}"
@@ -139,7 +147,6 @@ args = parser.parse_args()
 apply_config(args, args.config)
 
 save_config_in_saving_path(args)
-
 
 is_agn = args.method == "RGN" or args.method == "SGN"
 device_name = 'cuda' if is_available() else 'cpu'
@@ -162,8 +169,8 @@ test_prcition1, test_prcition5 = [], []
 train_losses, test_losses = [], []
 
 
-
-def save_results(train_loss, train_prc1, train_prc5, test_loss, test_prc1, test_prc5):
+def save_results(train_loss, train_prc1, train_prc5, test_loss, test_prc1,
+                 test_prc5):
     train_losses.append(train_loss)
     train_prcition1.append(train_prc1)
     train_prcition5.append(train_prc5)
@@ -244,29 +251,54 @@ def init_saveing_path():
     args.saveing_path = args.saveing_path + '_{}'.format(args.method)
     if args.method == 'SGN':
         args.saveing_path = args.saveing_path + 'V{}'.format(args.SGN_version)
-    elif args.method =='RGN':
+    elif args.method == 'RGN':
         args.saveing_path = args.saveing_path + 'V{}'.format(args.RGN_version)
     args.saveing_path = args.saveing_path + '{}'.format(args.norm_shuffle)
     args.saveing_path = args.saveing_path + '_{}b'.format(args.batch_size)
     args.saveing_path = args.saveing_path + '_{}lr'.format(args.lr)
     args.saveing_path = args.saveing_path + '_{}m'.format(args.momentum)
     if not args.group_by_size:
-        args.saveing_path = args.saveing_path + '_{}groups'.format(args.group_norm)
+        args.saveing_path = args.saveing_path + '_{}groups'.format(
+            args.group_norm)
     else:
-        args.saveing_path = args.saveing_path + '_{}groupsize'.format(args.group_norm_size)
-    args.saveing_path = args.saveing_path + '_{}reclustringinarow'.format(args.riar)
+        args.saveing_path = args.saveing_path + '_{}groupsize'.format(
+            args.group_norm_size)
+    args.saveing_path = args.saveing_path + '_{}reclustringinarow'.format(
+        args.riar)
     args.saveing_path = args.saveing_path + '_{}eps'.format(args.eps)
     args.saveing_path = args.saveing_path + '_{}seed'.format(args.seed)
-    args.saveing_path = args.saveing_path + '_{}maxreclustring'.format(args.max_norm_shuffle)
+    args.saveing_path = args.saveing_path + '_{}maxreclustring'.format(
+        args.max_norm_shuffle)
     args.saveing_path = args.saveing_path + '_{}'.format(args.scheduler_name)
     args.saveing_path = args.saveing_path + '.tar'
 
 
+def generate_wandb_name():
+    wanda_test_name = f"{args.method}"
+
+    if is_agn:
+        if args.method == 'RGN':
+            wanda_test_name += f'_V{args.RGN_version}'
+        else:
+            wanda_test_name += f'_V{args.SGN_version}'
+
+    if args.epoch_start_cluster != 0:
+        wanda_test_name += f'_epoch-start-cluster-{args.epoch_start_cluster}'
+
+    if args.cluster_last_batch:
+        wanda_test_name += f'_cluster-last_batch'
+
+    return wanda_test_name
+
+
 def load_checkpoint(model, optimizer):
     checkpoint = load(args.resume, map_location=device)
-    train_losses, test_losses = checkpoint['train_losses'], checkpoint['test_losses']
-    train_prcition1, train_prcition5 = checkpoint['train_prcition1'], checkpoint['train_prcition5']
-    test_prcition1, test_prcition5 = checkpoint['test_prcition1'], checkpoint['test_prcition5']
+    train_losses, test_losses = checkpoint['train_losses'], checkpoint[
+        'test_losses']
+    train_prcition1, train_prcition5 = checkpoint['train_prcition1'], \
+                                       checkpoint['train_prcition5']
+    test_prcition1, test_prcition5 = checkpoint['test_prcition1'], checkpoint[
+        'test_prcition5']
     zero_state_dict = checkpoint['Zero_state_dict']
     best_state_dict = checkpoint['Best_state_dict']
     best_prec1 = max(test_prcition1)
@@ -276,15 +308,14 @@ def load_checkpoint(model, optimizer):
     # with torch.no_grad():
     #     for param1, param2 in zip(model.state_dict(), checkpoint_state_dict):
     #         model.state_dict()[param1].data.fill_(0).add_(checkpoint_state_dict[param2].data)
-    train_prcition1, train_prcition5 = checkpoint['train_prcition1'], checkpoint['train_prcition5']
-    test_prcition1, test_prcition5 = checkpoint['test_prcition1'], checkpoint['test_prcition5']
-    train_losses, test_losses = checkpoint['train_losses'], checkpoint['test_losses']
+    train_prcition1, train_prcition5 = checkpoint['train_prcition1'], \
+                                       checkpoint['train_prcition5']
+    test_prcition1, test_prcition5 = checkpoint['test_prcition1'], checkpoint[
+        'test_prcition5']
+    train_losses, test_losses = checkpoint['train_losses'], checkpoint[
+        'test_losses']
     return model, optimizer
 
 
 def groupsBySize(numofchannels):
     return (numofchannels / args.group_norm_size)
-
-
-
-i = 0
