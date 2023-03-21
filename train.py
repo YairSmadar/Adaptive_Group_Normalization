@@ -113,6 +113,13 @@ def main():
         global_vars.recluster = False  # no need to recluster in validation
         test_loss, test_prc1, test_prc5 = validate(val_loader, model, criterion, epoch, get_to_start_epoch)
 
+        if global_vars.args.use_wandb:
+            wandb.log({"train loss": train_loss,
+                       "train accuracy (top1)": train_prc1,
+                       "test loss": test_loss,
+                       "test accuracy": test_prc1
+                       })
+
         if not get_to_start_epoch:
             # save epoch prcitions and losses
             global_vars.save_results(train_loss, train_prc1, train_prc5, test_loss, test_prc1, test_prc5)
@@ -204,9 +211,6 @@ def train(train_loader, model, criterion, optimizer, epoch, get_to_start_epoch):
             'Train:\t[{0}]\tLoss {loss.avg:.4f}\tPrec@1 {top1.avg:.3f}\tPrec@5 {top5.avg:.3f}\n'.format(epoch, loss=losses,
                                                                                                         top1=top1,
                                                                                                         top5=top5))
-        if global_vars.args.use_wandb:
-            wandb.log({"train loss": losses.avg})
-            wandb.log({"train accuracy (top1)": top1.avg})
 
     print(f"Total Epoch {epoch} time: {time() - epoch_time}")
     return losses.avg, top1.avg, top5.avg
@@ -257,10 +261,6 @@ def validate(val_loader, model, criterion, epoch, get_to_start_epoch=False):
         print('Test:\t[{0}]\tLoss {loss.avg:.4f}\tPrec@1 {top1.avg:.3f}\tPrec@5 {top5.avg:.3f}\n'.format(epoch, loss=losses,
                                                                                                          top1=top1,
                                                                                                         top5=top5))
-
-        if global_vars.args.use_wandb:
-            wandb.log({"test loss": losses.avg})
-            wandb.log({"test accuracy": top1.avg})
 
     return losses.avg, top1.avg, top5.avg
 
