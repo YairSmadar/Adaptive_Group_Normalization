@@ -38,7 +38,12 @@ def main():
         wandb.config = {
             "learning_rate": args.lr,
             "epochs": args.epochs,
-            "batch_size": args.batch_size
+            "batch_size": args.batch_size,
+            "method": args.method,
+            "SGN_version": args.SGN_version,
+            "RGN_version": args.RGN_version,
+            "epoch_start_cluster": args.epoch_start_cluster,
+            "cluster_last_batch": args.cluster_last_batch
         }
 
     # print parameters
@@ -96,37 +101,15 @@ def main():
     for epoch in range(args.epochs):
 
         global_vars.epoch_num = epoch
-        #  When loading model form check-point - iterate the data in order to set the data to be
-        #  exact as the last checkpoint
+
+        #  When loading model form check-point - iterate
+        #  the data in order to set the data to be exact as the last checkpoint
         get_to_start_epoch = False
         if epoch < args.start_epoch:
             get_to_start_epoch = True
 
-        # # set the boolean to true if the norm layer is GN (for AGN layer).
-        # before_shuffle = epoch < args.norm_shuffle
-
-        if epoch == 1 and global_vars.args.plot_std:
-            import matplotlib.pyplot as plt
-            z = [x for x in model.module.norm1.before_list]
-            # z = [*z[0], *z[1]]
-            plt.plot(z)
-
-            z = [x for x in model.module.norm1.after_list]
-            # z = [*z[0], *z[1]]
-            plt.plot(z)
-            # plt.plot(model.module.norm1.after_list)
-
-            MODELS_LOC = 'content\\'
-            plt.ylabel('STD (high is worse)')
-            plt.xlabel('Batch number')
-            plt.legend(['Before SGN', 'After SGN'])
-            plt.savefig(MODELS_LOC + 'one_class.png')
-
-            plt.show()
-            # plt.close()
-
         # train for one epoch and evaluate on validation set
-        train_loss, train_prc1, train_prc5 = train(train_loader, model, criterion, optimizer, epoch, reclustring_loader, get_to_start_epoch)
+        train_loss, train_prc1, train_prc5 = train(train_loader, model, criterion, optimizer, epoch, get_to_start_epoch)
         global_vars.recluster = False  # no need to recluster in validation
         test_loss, test_prc1, test_prc5 = validate(val_loader, model, criterion, epoch, get_to_start_epoch)
 
@@ -141,8 +124,9 @@ def main():
             global_vars.save_checkpoint(model, optimizer, epoch)
 
 
-def train(train_loader, model, criterion, optimizer, epoch, reclustring_loader, get_to_start_epoch):
+def train(train_loader, model, criterion, optimizer, epoch, get_to_start_epoch):
 
+    epoch_time = time()
     batch_time = AverageMeter()
     data_time = AverageMeter()
     losses = AverageMeter()
@@ -182,7 +166,6 @@ def train(train_loader, model, criterion, optimizer, epoch, reclustring_loader, 
 
             # compute output
             model.module.batch_num = i
-            global_vars.batch_num = i
             output = model(input)
 
             if global_vars.device_name == 'cuda':
@@ -212,10 +195,9 @@ def train(train_loader, model, criterion, optimizer, epoch, reclustring_loader, 
                       'Prec@5 {top5.val:.3f} ({top5.avg:.3f})'.format(
                     epoch, i, len(train_loader), batch_time=batch_time, loss=losses, top1=top1, top5=top5))
 
-
-            # Optional
-            if global_vars.args.use_wandb:
-                wandb.watch(model)
+            # # Optional
+            # if global_vars.args.use_wandb:
+            #     wandb.watch(model)
 
     if not get_to_start_epoch:
         print(
@@ -226,6 +208,7 @@ def train(train_loader, model, criterion, optimizer, epoch, reclustring_loader, 
             wandb.log({"train loss": losses.avg})
             wandb.log({"train accuracy (top1)": top1.avg})
 
+    print(f"Total Epoch {epoch} time: {time() - epoch_time}")
     return losses.avg, top1.avg, top5.avg
 
 
@@ -242,11 +225,6 @@ def validate(val_loader, model, criterion, epoch, get_to_start_epoch=False):
 
     end = time()
 
-    from sklearn.metrics import confusion_matrix
-    import torch as torch
-    y_pred = []
-    y_true = []
-
     for i, (input, target) in enumerate(val_loader):
         if not get_to_start_epoch:
             if global_vars.device_name == 'cuda':
@@ -255,13 +233,6 @@ def validate(val_loader, model, criterion, epoch, get_to_start_epoch=False):
             # compute output
             with no_grad():
                 output = model(input)
-
-                output_for_conf = (torch.max(torch.exp(output), 1)[1]).data.cpu().numpy()
-                y_pred.extend(output_for_conf)
-
-                labels_for_conf = target.data.cpu().numpy()
-                y_true.extend(labels_for_conf)
-
                 loss = criterion(output, target)
 
             # measure accuracy and record loss
@@ -283,10 +254,6 @@ def validate(val_loader, model, criterion, epoch, get_to_start_epoch=False):
                     epoch, i, len(val_loader), batch_time=batch_time, loss=losses, top1=top1, top5=top5))
 
     if not get_to_start_epoch:
-        classes = ('poppy', 'chair')
-        cf_matrix = confusion_matrix(y_true, y_pred)
-        # print(cf_matrix)
-
         print('Test:\t[{0}]\tLoss {loss.avg:.4f}\tPrec@1 {top1.avg:.3f}\tPrec@5 {top5.avg:.3f}\n'.format(epoch, loss=losses,
                                                                                                          top1=top1,
                                                                                                         top5=top5))

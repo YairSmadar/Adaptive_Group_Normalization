@@ -1,13 +1,9 @@
-import sys
-import time
-
 import numpy as np
 import torch
 from torch import clone, empty_like, tensor, sort, zeros_like, cat, ceil, floor
 from torch.nn import Module, GroupNorm
 import global_vars
 from agn_utils import getLayerIndex
-np.set_printoptions(threshold=sys.maxsize)
 
 
 class SimilarityGroupNorm(Module):
@@ -22,66 +18,43 @@ class SimilarityGroupNorm(Module):
         self.group_size = int(num_channels / num_groups)
         self.eps = eps
 
-        self.before_list = []
-        self.after_list = []
-
         self.batch_layer_index = {}
 
-    def forward(self, Conv_input, batch_num: int = -1):
+    def forward(self, Conv_input):
 
         if global_vars.args.epoch_start_cluster >= global_vars.epoch_num:
             return self.groupNorm(Conv_input)
 
         N, C, H, W = Conv_input.size()
 
-        if global_vars.args.plot_std:
-            input_2_dim = Conv_input.reshape(N * C, H * W)
-            std_before = input_2_dim.std(dim=1)
-            self.before_list.append(torch.sum(std_before).cpu().detach().numpy())
-
         if global_vars.recluster:
             self.recluster(Conv_input)
-            self.batch_layer_index[batch_num] = (self.indexes.clone(), self.reverse_indexes.clone())
+
         Conv_input_reshaped = Conv_input.reshape(N * C, W * H)
 
-        if global_vars.args.save_shuff_idxs:  # not used
-            Conv_input_new_idx = Conv_input_reshaped[self.batch_layer_index[batch_num][0], :]
-            Conv_input_new_idx_norm = self.groupNorm(Conv_input_new_idx.reshape(N, C, H, W))
-            Conv_input_new_idx_norm = Conv_input_new_idx_norm.reshape(N*C, W*H)
-            Conv_input_orig_idx_norm = Conv_input_new_idx_norm[self.batch_layer_index[batch_num][1], :]
-        else:
-            Conv_input_new_idx = Conv_input_reshaped[self.indexes, :]
-            GN_input = Conv_input_new_idx.reshape(N, C, H, W)
-            Conv_input_new_idx_norm = self.groupNorm(GN_input)
-            Conv_input_new_idx_norm = Conv_input_new_idx_norm.reshape(N*C, W*H)
-            Conv_input_orig_idx_norm = Conv_input_new_idx_norm[self.reverse_indexes, :]
+        Conv_input_new_idx = Conv_input_reshaped[self.indexes, :]
+        GN_input = Conv_input_new_idx.reshape(N, C, H, W)
+        Conv_input_new_idx_norm = self.groupNorm(GN_input)
+        Conv_input_new_idx_norm = Conv_input_new_idx_norm.reshape(N*C, W*H)
+        Conv_input_orig_idx_norm = Conv_input_new_idx_norm[self.reverse_indexes, :]
 
         ret = Conv_input_orig_idx_norm.reshape(N, C, H, W).requires_grad_(requires_grad=True)
-
-        if global_vars.args.plot_std:
-            N, C, H, W = ret.size()
-            input_2_dim = ret.reshape(N * C, H * W)
-            std_after = input_2_dim.std(dim=1)
-            self.before_list.append(torch.sum(std_after).cpu().detach().numpy())
-
-            print("std before - after:", np.sum((std_before - std_after).cpu().detach().numpy()))
 
         return ret
 
     def recluster(self, Conv_input):
         N, C, W, H = Conv_input.size()
-        t = time.time()
-        self.indexes = self.SimilarityGroupNormClustering(clone(Conv_input), self.num_groups, self.layer_index).to(
+        self.indexes = self.SimilarityGroupNormClustering(clone(Conv_input), self.num_groups).to(
             dtype=torch.int64)
-        # print(f"SimilarityGroupNormClustering time {time.time() - t}")
 
         self.reverse_indexes = empty_like(self.indexes)
         for ind in range(N*C):
             self.reverse_indexes[self.indexes[ind]] = tensor(ind, device=global_vars.device)
 
-    def SimilarityGroupNormClustering(self, channels_input, numGruops, layerIndex):
+    def SimilarityGroupNormClustering(self, channels_input, numGruops):
         N, C, H, W = channels_input.size()
         groupSize = int(C / numGruops)
+
         # grouping as far channels, (mean/var)*(mean+var), range in group: numGruops
         if global_vars.args.SGN_version == 1:
             channelsClustering = self.SortChannelsV1(channels_input, numGruops)

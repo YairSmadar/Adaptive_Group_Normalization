@@ -109,7 +109,6 @@ def apply_config(args: Namespace, config_path: str):
     :param config_path: the path to a config JSON file.
     """
     config_path = copy(config_path)
-    # delattr(args, 'config')
     if config_path:
         # Opening JSON file
         f = open(config_path)
@@ -155,7 +154,6 @@ best_prec1 = 0
 normalizationEpoch = 0
 generator = Generator()
 generator.manual_seed(args.seed)
-batch_num = 0
 epoch_num = 0
 
 # initialize the results arrays
