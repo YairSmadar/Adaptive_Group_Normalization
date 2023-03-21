@@ -22,7 +22,7 @@ class SimilarityGroupNorm(Module):
 
     def forward(self, Conv_input):
 
-        if global_vars.args.epoch_start_cluster >= global_vars.epoch_num:
+        if global_vars.args.epoch_start_cluster > global_vars.epoch_num:
             return self.groupNorm(Conv_input)
 
         N, C, H, W = Conv_input.size()
@@ -30,15 +30,25 @@ class SimilarityGroupNorm(Module):
         if global_vars.recluster:
             self.recluster(Conv_input)
 
-        Conv_input_reshaped = Conv_input.reshape(N * C, W * H)
+        # in case using shuffle last batch
+        if self.indexes is None:
+            return self.groupNorm(Conv_input)
 
-        Conv_input_new_idx = Conv_input_reshaped[self.indexes, :]
-        GN_input = Conv_input_new_idx.reshape(N, C, H, W)
+        Conv_input_reshaped = Conv_input.view(-1, W * H)
+
+        # Use torch.index_select for better performance
+        Conv_input_new_idx = torch.index_select(Conv_input_reshaped, 0,
+                                                self.indexes)
+        GN_input = Conv_input_new_idx.view(N, C, H, W)
         Conv_input_new_idx_norm = self.groupNorm(GN_input)
-        Conv_input_new_idx_norm = Conv_input_new_idx_norm.reshape(N*C, W*H)
-        Conv_input_orig_idx_norm = Conv_input_new_idx_norm[self.reverse_indexes, :]
+        Conv_input_new_idx_norm = Conv_input_new_idx_norm.view(-1, W * H)
 
-        ret = Conv_input_orig_idx_norm.reshape(N, C, H, W).requires_grad_(requires_grad=True)
+        # Use torch.index_select for better performance
+        Conv_input_orig_idx_norm = torch.index_select(Conv_input_new_idx_norm,
+                                                      0, self.reverse_indexes)
+
+        ret = Conv_input_orig_idx_norm.view(N, C, H, W).requires_grad_(
+            requires_grad=True)
 
         return ret
 
@@ -273,9 +283,8 @@ class SimilarityGroupNorm(Module):
 
         # harmonic mean
         sort_metric = 2 * (mean * var) / (mean + var)
-        sorted_indexes = sorted(range(len(sort_metric)),
-                                key=lambda k: sort_metric[k])
-        channelsClustering = torch.Tensor(sorted_indexes)
+
+        channelsClustering = torch.argsort(sort_metric)
 
         return channelsClustering
 

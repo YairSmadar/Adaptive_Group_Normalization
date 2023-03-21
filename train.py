@@ -212,7 +212,7 @@ def train(train_loader, model, criterion, optimizer, epoch, get_to_start_epoch):
                                                                                                         top1=top1,
                                                                                                         top5=top5))
 
-    print(f"Total Epoch {epoch} time: {time() - epoch_time}")
+    print(f"Total Epoch {epoch} time: {time() - epoch_time}\n")
     return losses.avg, top1.avg, top5.avg
 
 
