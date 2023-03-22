@@ -10,14 +10,14 @@
   "norm_shuffle": 20,
   "riar": 1,
   "print_freq": 1250,
-  "saveing_path": "/content/drive/MyDrive/AGN/saved_models/",
-  "load": "/content/drive/MyDrive/AGN/init_weight.pt",
+  "saveing_path": "saved_models/",
+  "load": "init_weights/init_weight.pt",
   "seed": 0,
   "shuf_each_batch": false,
   "group_by_size": true,
   "group_norm_size": 16,
   "use_wandb": true,
-  "epoch_start_cluster": 10,
+  "epoch_start_cluster": 20,
   "cluster_last_batch": false,
   "classes_to_train":
   [

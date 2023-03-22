@@ -287,7 +287,8 @@ def generate_wandb_name():
     if args.cluster_last_batch:
         wanda_test_name += f'_cluster-last_batch'
 
-    wanda_test_name += f'_norm-shuffle-{args.norm_shuffle}'
+    if args.norm_shuffle != 10:
+        wanda_test_name += f'_shuff-every-ep-{args.norm_shuffle}'
 
 
 
