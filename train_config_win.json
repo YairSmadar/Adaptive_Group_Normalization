@@ -14,7 +14,7 @@
   "seed": 0,
   "shuf_each_batch": false,
   "group_by_size": true,
-  "use_wandb": false,
+  "use_wandb": true,
   "group_norm_size": 16,
   "plot_std": false,
   "epoch_start_cluster": 0,

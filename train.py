@@ -35,6 +35,8 @@ def main():
                    entity="the-smadars",
                    name=global_vars.generate_wandb_name(),
                    config=args)
+        wandb.run.summary["best_test_accuracy"] = 0
+        wandb.run.summary["best_test_loss"] = 999
 
     # print parameters
     global_vars.printParameters()
@@ -100,7 +102,6 @@ def main():
 
         # train for one epoch and evaluate on validation set
         train_loss, train_prc1, train_prc5 = train(train_loader, model, criterion, optimizer, epoch, get_to_start_epoch)
-        global_vars.recluster = False  # no need to recluster in validation
         test_loss, test_prc1, test_prc5 = validate(val_loader, model, criterion, epoch, get_to_start_epoch)
 
         if global_vars.args.use_wandb:
@@ -109,6 +110,13 @@ def main():
                        "test loss": test_loss,
                        "test accuracy": test_prc1
                        })
+
+            wandb.run.summary["best_test_accuracy"] = \
+                test_prc1 if test_prc1 > wandb.run.summary["best_test_accuracy"] \
+                    else wandb.run.summary["best_test_accuracy"]
+            wandb.run.summary["best_test_loss"] = \
+                train_loss if train_loss < wandb.run.summary["best_test_loss"] \
+                    else wandb.run.summary["best_test_loss"]
 
         if not get_to_start_epoch:
             # save epoch prcitions and losses
@@ -146,11 +154,12 @@ def train(train_loader, model, criterion, optimizer, epoch, get_to_start_epoch):
                     global_vars.recluster = (i == num_of_batches - 1)
                 else:
                     global_vars.recluster = (i == 0)
-                epoch_clustring_loop = epoch % global_vars.args.norm_shuffle
+
+                shifted_epoch = epoch + global_vars.args.epoch_start_cluster
+                epoch_clustring_loop = shifted_epoch % global_vars.args.norm_shuffle
                 if global_vars.recluster:
                     global_vars.recluster = (
                                                         epoch_clustring_loop < global_vars.args.riar) and epoch < global_vars.args.max_norm_shuffle
-                    global_vars.normalizationEpoch = epoch
 
                 if global_vars.args.shuf_each_batch:
                     global_vars.recluster = True
@@ -213,6 +222,8 @@ def validate(val_loader, model, criterion, epoch, get_to_start_epoch=False):
     top5 = AverageMeter()
 
     print_freq = global_vars.args.print_freq
+
+    global_vars.recluster = False  # no need to recluster in validation
 
     # switch to evaluate mode
     model.eval()

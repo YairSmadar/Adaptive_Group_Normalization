@@ -100,16 +100,6 @@ class SimilarityGroupNorm(Module):
             print(f"SGN_version number {global_vars.args.SGN_version} is not available!")
             exit(1)
 
-        #         torch.save(
-        #           {
-        #             'layer': self.layer_index,
-        #             'epoch': global_vars.normalizationEpoch,
-        #             'df': df,
-        #             'channelsClustering': channelsClustering,
-        #           },
-        #           '/content/drive/MyDrive/AdaptiveNormalization/results/SGN channels data/'
-        #               +'layer{}_epoch{}.tar'.format(self.layer_index, global_vars.normalizationEpoch)
-        #         )
         return channelsClustering
 
     def get_df(self, channels_input):

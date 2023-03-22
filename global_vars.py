@@ -158,7 +158,6 @@ best_state_dict = None
 zero_state_dict = None
 best_prec1 = 0
 
-normalizationEpoch = 0
 generator = Generator()
 generator.manual_seed(args.seed)
 epoch_num = 0
@@ -287,6 +286,10 @@ def generate_wandb_name():
 
     if args.cluster_last_batch:
         wanda_test_name += f'_cluster-last_batch'
+
+    wanda_test_name += f'_norm-shuffle-{args.norm_shuffle}'
+
+
 
     return wanda_test_name
 

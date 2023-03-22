@@ -7,7 +7,7 @@
   "batch_size": 16,
   "learning_rate": 0.001,
   "group_norm": 16,
-  "norm_shuffle": 10,
+  "norm_shuffle": 20,
   "riar": 1,
   "print_freq": 1250,
   "saveing_path": "/content/drive/MyDrive/AGN/saved_models/",
@@ -16,9 +16,9 @@
   "shuf_each_batch": false,
   "group_by_size": true,
   "group_norm_size": 16,
-  "use_wandb": false,
-  "epoch_start_cluster": 0,
-  "cluster_last_batch": true,
+  "use_wandb": true,
+  "epoch_start_cluster": 10,
+  "cluster_last_batch": false,
   "classes_to_train":
   [
     "all"
