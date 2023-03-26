@@ -66,6 +66,9 @@ parser.add_argument('--resume', default=None, type=str, metavar='PATH',
 parser.add_argument('--scheduler_name', default="default", type=str,
                     metavar='PATH',
                     help='for future scheduler selection (default: "default")')
+parser.add_argument('--base_scheduler_name', default="default", type=str,
+                    metavar='PATH',
+                    help='relevant when scheduler_name=myCustomScheduler')
 parser.add_argument('--seed', default=0, type=int,
                     help='fix all random behivers to random state (default: 0)')
 parser.add_argument('--GN_in_bt', default=False, action="store_true",
@@ -281,16 +284,15 @@ def generate_wandb_name():
         else:
             wanda_test_name += f'_V{args.SGN_version}'
 
-    if args.epoch_start_cluster != 0:
-        wanda_test_name += f'_epoch-start-cluster-{args.epoch_start_cluster}'
+        if args.epoch_start_cluster != 0:
+            wanda_test_name += f'_epoch-start-cluster-{args.epoch_start_cluster}'
 
-    if args.cluster_last_batch:
-        wanda_test_name += f'_cluster-last_batch'
+        if args.cluster_last_batch:
+            wanda_test_name += f'_cluster-last_batch'
 
-    if args.norm_shuffle != 10:
         wanda_test_name += f'_shuff-every-ep-{args.norm_shuffle}'
 
-
+    wanda_test_name += f'_bs-{args.batch_size}'
 
     return wanda_test_name
 
