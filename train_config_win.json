@@ -14,11 +14,13 @@
   "seed": 0,
   "shuf_each_batch": false,
   "group_by_size": true,
-  "use_wandb": true,
-  "group_norm_size": 16,
+  "use_wandb": false,
+  "group_norm_size": 8,
   "plot_std": false,
   "epoch_start_cluster": 0,
   "cluster_last_batch": true,
+  "scheduler_name": "myCustomScheduler",
+  "base_scheduler_name": "default",
   "classes_to_train":
   [
     "apple",

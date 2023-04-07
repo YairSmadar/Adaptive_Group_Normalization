@@ -7,7 +7,7 @@ from os.path import isfile
 from time import time
 from numpy.random import seed as seed1
 from resnet import resnet50
-from scedulers import setSchedulers, schedulersStep
+from scedulers import SchedulerFactory
 from data_loading import getLoaders
 
 from torch import use_deterministic_algorithms, load, no_grad
@@ -17,13 +17,13 @@ from torch.nn import CrossEntropyLoss, DataParallel
 from torch.optim import SGD
 import torch
 
-seed1(global_vars.args.seed)
-seed2(global_vars.args.seed)
-if is_available():
-    seed3(global_vars.args.seed)
-deterministic = True
-benchmark = False
-use_deterministic_algorithms(True)
+# seed1(global_vars.args.seed)
+# seed2(global_vars.args.seed)
+# if is_available():
+#     seed3(global_vars.args.seed)
+# deterministic = True
+# benchmark = False
+# use_deterministic_algorithms(True)
 
 
 def main():
@@ -79,7 +79,10 @@ def main():
     global_vars.init_saveing_path()
 
     # set schedulers
-    setSchedulers(optimizer)
+    scheduler = SchedulerFactory.create_scheduler(optimizer,
+                                                  args.scheduler_name,
+                                                  args.base_scheduler_name,
+                                                  args.epoch_start_cluster)
 
     # get the learning rate to the starting value
     for epoch in range(0, args.start_epoch):
@@ -88,7 +91,7 @@ def main():
         optimizer.step()
 
         # adjust the learning rate
-        schedulersStep(epoch)
+        scheduler.step(epoch)
 
     for epoch in range(args.epochs):
 
@@ -101,8 +104,8 @@ def main():
             get_to_start_epoch = True
 
         # train for one epoch and evaluate on validation set
-        train_loss, train_prc1, train_prc5 = train(train_loader, model, criterion, optimizer, epoch, get_to_start_epoch)
-        test_loss, test_prc1, test_prc5 = validate(val_loader, model, criterion, epoch, get_to_start_epoch)
+        train_loss, train_prc1, train_prc5 = 1,1,1# train(train_loader, model, criterion, optimizer, epoch, get_to_start_epoch)
+        test_loss, test_prc1, test_prc5 = 1,1,1#validate(val_loader, model, criterion, epoch, get_to_start_epoch)
 
         if global_vars.args.use_wandb:
             wandb.log({"train loss": train_loss,
@@ -123,7 +126,7 @@ def main():
             global_vars.save_results(train_loss, train_prc1, train_prc5, test_loss, test_prc1, test_prc5)
 
             # adjust the learning rate
-            schedulersStep(epoch)
+            scheduler.step(epoch)
 
             # save checkpoint
             global_vars.save_checkpoint(model, optimizer, epoch)

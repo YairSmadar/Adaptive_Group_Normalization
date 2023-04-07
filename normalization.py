@@ -7,25 +7,37 @@ from similarity_group_normalization import SimilarityGroupNorm as sgn
 
 
 def norm2d(planes):
-    if global_vars.args.method == "BN":
+    args = global_vars.args
+
+    if args.method == "BN":
         return BatchNorm2d(planes)
-    if global_vars.args.group_by_size:
-        if global_vars.args.group_norm_size >= planes:
-            return LayerNorm(planes, eps=global_vars.args.eps)
-        numofgroups = int(groupsBySize(planes))
-        if global_vars.args.method == "GN":
-            return GroupNorm(numofgroups, planes, eps=global_vars.args.eps)
-        elif global_vars.args.method == "RGN":
-            return rgn(numofgroups, planes, eps=global_vars.args.eps)
-        elif global_vars.args.method == "SGN":
-            return sgn(numofgroups, planes, eps=global_vars.args.eps)
+
+    if args.group_by_size:
+        if args.group_norm_size >= planes:
+            return LayerNorm(planes, eps=args.eps)
+
+        num_of_groups = int(groupsBySize(planes))
+
+        if args.method == "GN":
+            return GroupNorm(num_of_groups, planes, eps=args.eps)
+
+        elif args.method == "RGN":
+            return rgn(num_of_groups, planes, eps=args.eps)
+
+        elif args.method == "SGN":
+            return sgn(num_of_groups, planes, eps=args.eps)
+
         else:
             raise Exception("the normalization method not recognized")
-    if global_vars.args.method == "GN":
-        return GroupNorm(global_vars.args.group_norm, planes, eps=global_vars.args.eps)
-    elif global_vars.args.method == "RGN":
-        return rgn(global_vars.args.group_norm, planes, eps=global_vars.args.eps)
-    elif global_vars.args.method == "SGN":
-        return sgn(global_vars.args.group_norm, planes, eps=global_vars.args.eps)
+
+    if args.method == "GN":
+        return GroupNorm(args.group_norm, planes, eps=args.eps)
+
+    elif args.method == "RGN":
+        return rgn(args.group_norm, planes, eps=args.eps)
+
+    elif args.method == "SGN":
+        return sgn(args.group_norm, planes, eps=args.eps)
+
     else:
         raise Exception("the normalization method not recognized")

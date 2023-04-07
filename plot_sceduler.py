@@ -1,19 +1,8 @@
-import os
-# import shutil
-# import unittest
-import copy
-import time
-import math
-import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
 import global_vars
 from resnet import resnet50
-from scedulers import setSchedulers, schedulersStep
-from data_loading import getLoaders
-
+from scedulers import SchedulerFactory
 import torch
-from torch.cuda.random import initial_seed
 import torch.nn as nn
 
 def main():
@@ -34,14 +23,16 @@ def main():
     # initialize the results arrays
     lr_array = []
     # get schedulers
-    setSchedulers(optimizer)
-
+    # set schedulers
+    scheduler = SchedulerFactory.create_scheduler(optimizer,
+                                                  args.scheduler_name,
+                                                  args.base_scheduler_name)
     for epoch in range(args.start_epoch, args.epochs):
         optimizer.zero_grad()
         optimizer.step()
 
         # adjust the learning rate
-        schedulersStep(epoch)
+        scheduler.step(epoch)
 
         lr_array.append(optimizer.param_groups[0]['lr'])
     
@@ -49,12 +40,9 @@ def main():
     plt.ylabel('lr')
     # plt.yscale('log')
     plt.xlabel('epoch')
-    plt.savefig('/content/lr_scheduler.png')
+    plt.savefig('res\\my_scheduler.png')
     plt.show()
     plt.close()
-
-
-
 
 if __name__ == '__main__':
     main()
