@@ -294,6 +294,11 @@ def generate_wandb_name():
 
     wanda_test_name += f'_bs-{args.batch_size}'
 
+    if args.group_by_size:
+        wanda_test_name += f'_gs-{args.group_norm_size}'
+    else:
+        wanda_test_name += f'_num-of-groups-{args.group_norm}'
+
     return wanda_test_name
 
 
