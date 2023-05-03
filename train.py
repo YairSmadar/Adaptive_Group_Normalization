@@ -142,6 +142,7 @@ def train(train_loader, model, criterion, optimizer, epoch, get_to_start_epoch):
 
     # switch to train mode
     model.train()
+    global_vars.train_mode = True
 
     end = time()
     num_of_batches = len(train_loader.batch_sampler)
@@ -216,6 +217,7 @@ def train(train_loader, model, criterion, optimizer, epoch, get_to_start_epoch):
 
 
 def validate(val_loader, model, criterion, epoch, get_to_start_epoch=False):
+    eval_time = time()
     batch_time = AverageMeter()
     losses = AverageMeter()
     top1 = AverageMeter()
@@ -224,6 +226,7 @@ def validate(val_loader, model, criterion, epoch, get_to_start_epoch=False):
     print_freq = global_vars.args.print_freq
 
     global_vars.recluster = False  # no need to recluster in validation
+    global_vars.train_mode = False
 
     # switch to evaluate mode
     model.eval()
@@ -262,6 +265,8 @@ def validate(val_loader, model, criterion, epoch, get_to_start_epoch=False):
         print('Test:\t[{0}]\tLoss {loss.avg:.4f}\tPrec@1 {top1.avg:.3f}\tPrec@5 {top5.avg:.3f}\n'.format(epoch, loss=losses,
                                                                                                          top1=top1,
                                                                                                         top5=top5))
+
+    print(f"Total Eval {epoch} time: {time() - eval_time}\n")
 
     return losses.avg, top1.avg, top5.avg
 
