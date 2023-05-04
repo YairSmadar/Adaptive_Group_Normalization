@@ -114,7 +114,6 @@ class SimilarityGroupNorm(Module):
                 f"SGN_version number {global_vars.args.SGN_version} is not available!")
             exit(1)
 
-        #self.get_groups_representation_num(channels_input, channelsClustering)
         self.get_channels_clustering_for_eval(channels_input,
                                             channelsClustering)
 
@@ -146,16 +145,15 @@ class SimilarityGroupNorm(Module):
         channel_groups = {i: [] for i in range(C)}
         for i in range(N*C):
             channel_to = channelsClustering[i] % C
-            group_num = self.map_to_group(C, channel_to)
-            channel_from = i % C
-            channel_groups[channel_from].append(group_num)
+            group_num = self.map_to_group(i)
+            channel_groups[channel_to.item()].append(group_num)
 
         max_elements = self.get_num_occurrences(channel_groups)
 
         final_channel_groups = {i: [] for i in range(self.num_groups)}
 
         # Create a max heap (using negative values)
-        min_heap = [(-max_val, i, group) for i, max_vals in
+        min_heap = [(-max_val, channel_num, group) for channel_num, max_vals in
                     enumerate(max_elements.values()) for group, max_val in
                     enumerate(max_vals)]
 
@@ -164,11 +162,11 @@ class SimilarityGroupNorm(Module):
         added_indices = set()
         while True:
             # Get the corresponding index and group of the maximum value
-            neg_max_value, i, group = heapq.heappop(min_heap)
+            neg_max_value, channel_num, group = heapq.heappop(min_heap)
 
-            if len(final_channel_groups[group]) < self.group_size and i not in added_indices:
-                final_channel_groups[group].append(i)
-                added_indices.add(i)
+            if len(final_channel_groups[group]) < self.group_size and channel_num not in added_indices:
+                final_channel_groups[group].append(channel_num)
+                added_indices.add(channel_num)
 
             # Break the loop when all groups are filled
             if all(len(lst) == self.group_size for lst in
@@ -210,10 +208,9 @@ class SimilarityGroupNorm(Module):
 
         return num_counts
 
-    def map_to_group(self, C, X):
-        group_size = C // self.num_groups
-        group_num = X // group_size
-        return group_num.item()
+    def map_to_group(self, X: int):
+        group_num = (X // self.group_size) % self.num_groups
+        return group_num
 
     def get_groups_representation_num(self, channels_input: torch.Tensor,
                                       channelsClustering: torch.Tensor):
