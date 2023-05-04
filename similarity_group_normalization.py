@@ -4,6 +4,7 @@ from torch import clone, empty_like, tensor, sort, zeros_like, cat, ceil, floor
 from torch.nn import Module, GroupNorm
 import global_vars
 from agn_utils import getLayerIndex
+import heapq
 
 
 class SimilarityGroupNorm(Module):
@@ -13,7 +14,9 @@ class SimilarityGroupNorm(Module):
                                    affine=True)
         self.indexes = None
         self.reverse_indexes = None
-        self.groups_representation_num = None
+        self.groups_representation_num = None  # not used
+        self.eval_indexes = None
+        self.eval_reverse_indexes = None
         self.layer_index = getLayerIndex()
         self.num_groups = num_groups
         self.num_channels = num_channels
@@ -35,29 +38,25 @@ class SimilarityGroupNorm(Module):
         if self.indexes is None:
             return self.groupNorm(Conv_input)
 
-        if not global_vars.train_mode or True:
-            rearranged_tensor, reverse_indices_tensor = \
-                self.eval_group_channels(Conv_input, self.harmonic_mean)
-            GN_output = self.groupNorm(rearranged_tensor)
-
-            # To reverse the operation
-            for b in range(N):
-                GN_output[b] = GN_output[b, reverse_indices_tensor[b], :, :]
-
-            return GN_output
+        if global_vars.train_mode:
+            indexes = self.indexes
+            reverse_indexes = self.reverse_indexes
+        else:
+            indexes = self.eval_indexes
+            reverse_indexes = self.eval_reverse_indexes
 
         Conv_input_reshaped = Conv_input.view(-1, W * H)
 
         # Use torch.index_select for better performance
         Conv_input_new_idx = torch.index_select(Conv_input_reshaped, 0,
-                                                self.indexes)
+                                                indexes)
         GN_input = Conv_input_new_idx.view(N, C, H, W)
         Conv_input_new_idx_norm = self.groupNorm(GN_input)
         Conv_input_new_idx_norm = Conv_input_new_idx_norm.view(-1, W * H)
 
         # Use torch.index_select for better performance
         Conv_input_orig_idx_norm = torch.index_select(Conv_input_new_idx_norm,
-                                                      0, self.reverse_indexes)
+                                                      0, reverse_indexes)
 
         ret = Conv_input_orig_idx_norm.view(N, C, H, W).requires_grad_(
             requires_grad=True)
@@ -115,7 +114,9 @@ class SimilarityGroupNorm(Module):
                 f"SGN_version number {global_vars.args.SGN_version} is not available!")
             exit(1)
 
-        self.get_groups_representation_num(channels_input, channelsClustering)
+        #self.get_groups_representation_num(channels_input, channelsClustering)
+        self.get_channels_clustering_for_eval(channels_input,
+                                            channelsClustering)
 
         return channelsClustering
 
@@ -138,6 +139,81 @@ class SimilarityGroupNorm(Module):
             raise Exception('harmonic mean support 4 or 2 dim only')
 
         return 2 * (mean * var) / (mean + var)
+
+    def get_channels_clustering_for_eval(self, channels_input: torch.Tensor,
+                                         channelsClustering: torch.Tensor):
+        N, C, _, _ = channels_input.size()
+        channel_groups = {i: [] for i in range(C)}
+        for i in range(N*C):
+            channel_to = channelsClustering[i] % C
+            group_num = self.map_to_group(C, channel_to)
+            channel_from = i % C
+            channel_groups[channel_from].append(group_num)
+
+        max_elements = self.get_num_occurrences(channel_groups)
+
+        final_channel_groups = {i: [] for i in range(self.num_groups)}
+
+        # Create a max heap (using negative values)
+        min_heap = [(-max_val, i, group) for i, max_vals in
+                    enumerate(max_elements.values()) for group, max_val in
+                    enumerate(max_vals)]
+
+        # Heapify the max heap
+        heapq.heapify(min_heap)
+        added_indices = set()
+        while True:
+            # Get the corresponding index and group of the maximum value
+            neg_max_value, i, group = heapq.heappop(min_heap)
+
+            if len(final_channel_groups[group]) < self.group_size and i not in added_indices:
+                final_channel_groups[group].append(i)
+                added_indices.add(i)
+
+            # Break the loop when all groups are filled
+            if all(len(lst) == self.group_size for lst in
+                   final_channel_groups.values()):
+                break
+
+        # Flatten the lists in the dictionary
+        flat_list = [elem for lst in final_channel_groups.values() for elem in lst]
+
+        # Convert the flattened list to a PyTorch tensor
+        factors = torch.arange(0, N) * C
+
+        eval_indexes = torch.tensor(flat_list)
+        eval_indexes = \
+            eval_indexes.repeat(N).reshape(N, C) + factors.unsqueeze(1)
+        self.eval_indexes = eval_indexes.reshape(-1).to(
+                channels_input.device)
+
+        self.eval_reverse_indexes = torch.argsort(self.eval_indexes).to(
+                channels_input.device)
+
+    def remove_elements_with_same_value_from_heap(self, heap, i):
+        elements_to_push_back = []
+
+        while heap:
+            neg_value, element_i, group = heapq.heappop(heap)
+            if element_i != i:
+                elements_to_push_back.append((neg_value, element_i, group))
+
+        for element in elements_to_push_back:
+            heapq.heappush(heap, element)
+
+    def get_num_occurrences(self, d):
+        num_counts = {i: [0]*self.num_groups for i in range(len(d))}
+
+        for i, lst in enumerate(d.values()):
+            for num in lst:
+                num_counts[i][num] += 1
+
+        return num_counts
+
+    def map_to_group(self, C, X):
+        group_size = C // self.num_groups
+        group_num = X // group_size
+        return group_num.item()
 
     def get_groups_representation_num(self, channels_input: torch.Tensor,
                                       channelsClustering: torch.Tensor):
