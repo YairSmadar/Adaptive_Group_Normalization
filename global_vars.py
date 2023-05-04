@@ -156,6 +156,7 @@ device_name = 'cuda' if is_available() else 'cpu'
 device = device(device_name)
 
 recluster = True
+train_mode = True
 before_shuffle = True
 best_state_dict = None
 zero_state_dict = None

@@ -4,24 +4,28 @@ from torch import clone, empty_like, tensor, sort, zeros_like, cat, ceil, floor
 from torch.nn import Module, GroupNorm
 import global_vars
 from agn_utils import getLayerIndex
+import heapq
 
 
 class SimilarityGroupNorm(Module):
     def __init__(self, num_groups: int, num_channels: int = 32, eps=1e-12):
         super(SimilarityGroupNorm, self).__init__()
-        self.groupNorm = GroupNorm(num_groups, num_channels, eps=eps, affine=True)
+        self.groupNorm = GroupNorm(num_groups, num_channels, eps=eps,
+                                   affine=True)
         self.indexes = None
         self.reverse_indexes = None
+        self.groups_representation_num = None  # not used
+        self.eval_indexes = None
+        self.eval_reverse_indexes = None
         self.layer_index = getLayerIndex()
         self.num_groups = num_groups
         self.num_channels = num_channels
         self.group_size = int(num_channels / num_groups)
         self.eps = eps
 
-        self.batch_layer_index = {}
-
     def forward(self, Conv_input):
 
+        # start shuffle at epoch > 0
         if global_vars.args.epoch_start_cluster > global_vars.epoch_num:
             return self.groupNorm(Conv_input)
 
@@ -34,18 +38,25 @@ class SimilarityGroupNorm(Module):
         if self.indexes is None:
             return self.groupNorm(Conv_input)
 
+        if global_vars.train_mode:
+            indexes = self.indexes
+            reverse_indexes = self.reverse_indexes
+        else:
+            indexes = self.eval_indexes
+            reverse_indexes = self.eval_reverse_indexes
+
         Conv_input_reshaped = Conv_input.view(-1, W * H)
 
         # Use torch.index_select for better performance
         Conv_input_new_idx = torch.index_select(Conv_input_reshaped, 0,
-                                                self.indexes)
+                                                indexes)
         GN_input = Conv_input_new_idx.view(N, C, H, W)
         Conv_input_new_idx_norm = self.groupNorm(GN_input)
         Conv_input_new_idx_norm = Conv_input_new_idx_norm.view(-1, W * H)
 
         # Use torch.index_select for better performance
         Conv_input_orig_idx_norm = torch.index_select(Conv_input_new_idx_norm,
-                                                      0, self.reverse_indexes)
+                                                      0, reverse_indexes)
 
         ret = Conv_input_orig_idx_norm.view(N, C, H, W).requires_grad_(
             requires_grad=True)
@@ -54,12 +65,14 @@ class SimilarityGroupNorm(Module):
 
     def recluster(self, Conv_input):
         N, C, W, H = Conv_input.size()
-        self.indexes = self.SimilarityGroupNormClustering(clone(Conv_input), self.num_groups).to(
+        self.indexes = self.SimilarityGroupNormClustering(clone(Conv_input),
+                                                          self.num_groups).to(
             dtype=torch.int64)
 
         self.reverse_indexes = empty_like(self.indexes)
-        for ind in range(N*C):
-            self.reverse_indexes[self.indexes[ind]] = tensor(ind, device=global_vars.device)
+        for ind in range(N * C):
+            self.reverse_indexes[self.indexes[ind]] = tensor(ind,
+                                                             device=global_vars.device)
 
     def SimilarityGroupNormClustering(self, channels_input, numGruops):
         N, C, H, W = channels_input.size()
@@ -97,24 +110,203 @@ class SimilarityGroupNorm(Module):
             channelsClustering = self.SortChannelsV8(channels_input)
 
         else:
-            print(f"SGN_version number {global_vars.args.SGN_version} is not available!")
+            print(
+                f"SGN_version number {global_vars.args.SGN_version} is not available!")
             exit(1)
 
+        self.get_channels_clustering_for_eval(channels_input,
+                                            channelsClustering)
+
         return channelsClustering
+
+    def harmonic_mean(self, _tensor):
+        """
+        Calculate the harmonic mean of 2 tensors, for the var and mean of
+        the tensor.
+        """
+        if _tensor.dim() == 4:
+            N, C, H, W = _tensor.size()
+            input_NC_WH = _tensor.reshape(N * C, H * W)
+
+            mean = input_NC_WH.mean(dim=1)
+            var = input_NC_WH.var(dim=1)
+
+        elif _tensor.dim() == 2:
+            mean = _tensor.mean()
+            var = _tensor.var()
+        else:
+            raise Exception('harmonic mean support 4 or 2 dim only')
+
+        return 2 * (mean * var) / (mean + var)
+
+    def get_channels_clustering_for_eval(self, channels_input: torch.Tensor,
+                                         channelsClustering: torch.Tensor):
+        N, C, _, _ = channels_input.size()
+        channel_groups = {i: [] for i in range(C)}
+        for i in range(N*C):
+            channel_to = channelsClustering[i] % C
+            group_num = self.map_to_group(i)
+            channel_groups[channel_to.item()].append(group_num)
+
+        max_elements = self.get_num_occurrences(channel_groups)
+
+        final_channel_groups = {i: [] for i in range(self.num_groups)}
+
+        # Create a max heap (using negative values)
+        min_heap = [(-max_val, channel_num, group) for channel_num, max_vals in
+                    enumerate(max_elements.values()) for group, max_val in
+                    enumerate(max_vals)]
+
+        # Heapify the max heap
+        heapq.heapify(min_heap)
+        added_indices = set()
+        while True:
+            # Get the corresponding index and group of the maximum value
+            neg_max_value, channel_num, group = heapq.heappop(min_heap)
+
+            if len(final_channel_groups[group]) < self.group_size and channel_num not in added_indices:
+                final_channel_groups[group].append(channel_num)
+                added_indices.add(channel_num)
+
+            # Break the loop when all groups are filled
+            if all(len(lst) == self.group_size for lst in
+                   final_channel_groups.values()):
+                break
+
+        # Flatten the lists in the dictionary
+        flat_list = [elem for lst in final_channel_groups.values() for elem in lst]
+
+        # Convert the flattened list to a PyTorch tensor
+        factors = torch.arange(0, N) * C
+
+        eval_indexes = torch.tensor(flat_list)
+        eval_indexes = \
+            eval_indexes.repeat(N).reshape(N, C) + factors.unsqueeze(1)
+        self.eval_indexes = eval_indexes.reshape(-1).to(
+                channels_input.device)
+
+        self.eval_reverse_indexes = torch.argsort(self.eval_indexes).to(
+                channels_input.device)
+
+    def remove_elements_with_same_value_from_heap(self, heap, i):
+        elements_to_push_back = []
+
+        while heap:
+            neg_value, element_i, group = heapq.heappop(heap)
+            if element_i != i:
+                elements_to_push_back.append((neg_value, element_i, group))
+
+        for element in elements_to_push_back:
+            heapq.heappush(heap, element)
+
+    def get_num_occurrences(self, d):
+        num_counts = {i: [0]*self.num_groups for i in range(len(d))}
+
+        for i, lst in enumerate(d.values()):
+            for num in lst:
+                num_counts[i][num] += 1
+
+        return num_counts
+
+    def map_to_group(self, X: int):
+        group_num = (X // self.group_size) % self.num_groups
+        return group_num
+
+    def get_groups_representation_num(self, channels_input: torch.Tensor,
+                                      channelsClustering: torch.Tensor):
+        """
+        Returns representative number for each group.
+        Using for inference/Test
+        """
+        with torch.no_grad():
+            N, C, H, W = channels_input.size()
+            Conv_input_reshaped = channels_input.view(-1, W * H)
+
+            # Use torch.index_select for better performance
+            Conv_input_new_idx = torch.index_select(Conv_input_reshaped,
+                                                    0, channelsClustering)
+            GN_input = Conv_input_new_idx.view(N, C, H, W)
+
+            # Reshape the tensor to (N, num_groups, group_size, H, W)
+            GN_input_grouped = GN_input.view(N, self.num_groups,
+                                             self.group_size, H, W)
+
+            # Compute the mean and variance along the grouped channel dimension
+            mean = GN_input_grouped.mean(dim=(2, 3, 4))
+            var = GN_input_grouped.var(dim=(2, 3, 4))
+
+            # Compute the harmonic mean
+            sort_metric = 2 * (mean * var) / (mean + var)
+
+            # Sum the sort_metric values across the batch and divide by N to get the mean
+            self.groups_representation_num = \
+                (sort_metric.sum(dim=0) / N).tolist()
+
+    def eval_group_channels(self, tensor, metric):
+        assert len(
+            self.groups_representation_num) > 0, "The length of the representative_numbers list must be greater than 0."
+
+        assert self.num_channels % self.num_groups == 0, "The number of channels must be divisible by the number of representative groups."
+
+        with torch.no_grad():
+            reverse_indices = []
+            batch_size = tensor.shape[0]
+
+            for b in range(batch_size):
+                # Calculate the representative number for each channel
+                channel_reps = torch.empty(self.num_channels, device=tensor.device)
+                for i in range(self.num_channels):
+                    channel_reps[i] = metric(tensor[b, i, :, :]).item()
+
+                # Compute the distance between each channel and all representative numbers
+                distances = torch.abs(channel_reps.view(-1, 1) - torch.tensor(self.groups_representation_num, device=tensor.device))
+
+                # Initialize the groups and available channels
+                channel_groups = {i: [] for i in range(self.num_groups)}
+                available_channels = torch.tensor(range(self.num_channels),
+                                                  device=tensor.device)
+
+                # Iteratively select the closest channel for each representative number
+                for _ in range(self.num_channels // self.num_groups):
+                    for group_idx in range(self.num_groups):
+                        closest_channel_idx = torch.argmin(
+                            distances[available_channels, group_idx])
+                        channel_idx = available_channels[closest_channel_idx]
+                        channel_groups[group_idx].append(channel_idx)
+                        available_channels = torch.cat((available_channels[
+                                                        :closest_channel_idx],
+                                                        available_channels[
+                                                        closest_channel_idx + 1:]))
+
+                # Rearrange the tensor using the calculated indices
+                batch_indices = torch.cat(
+                    [torch.tensor(group, device=tensor.device) for group in
+                     channel_groups.values()], dim=0)
+
+                # Calculate the reverse indices
+                batch_reverse_indices = torch.argsort(batch_indices)
+
+                reverse_indices.append(batch_reverse_indices)
+
+            reverse_indices_tensor = torch.stack(reverse_indices).to(
+                tensor.device)
+
+            return tensor, reverse_indices_tensor
 
     def get_df(self, channels_input):
         N, C, H, W = channels_input.size()
         input_2_dim = channels_input.reshape(N * C, H * W)
-        channel_dist = input_2_dim # cat([channels_input[i, :, :] for i in range(N)], dim=1)
-        mean = channel_dist.mean(dim=1)#.reshape(C, 1)
-        var = channel_dist.var(dim=1)#.reshape(C, 1)
-        std = channel_dist.std(dim=1)#.reshape(C, 1)
-        Vsize = H*W
+        channel_dist = input_2_dim  # cat([channels_input[i, :, :] for i in range(N)], dim=1)
+        mean = channel_dist.mean(dim=1)  # .reshape(C, 1)
+        var = channel_dist.var(dim=1)  # .reshape(C, 1)
+        std = channel_dist.std(dim=1)  # .reshape(C, 1)
+        Vsize = H * W
         sorted_channel_dist, _ = sort(channel_dist, dim=1)
         med1 = int(ceil(Vsize * tensor([0.25])))
         med2 = int(floor(Vsize * tensor([0.5])))
         med3 = int(floor(Vsize * tensor([0.75])))
-        madian3 = sorted_channel_dist[:, [med1, med2, med3]].to(device=global_vars.device)
+        madian3 = sorted_channel_dist[:, [med1, med2, med3]].to(
+            device=global_vars.device)
         df = cat([mean, var, std], dim=0)  #
         norm_df = df.clone()
         # for i in range(norm_df.shape[1]):
@@ -208,7 +400,8 @@ class SimilarityGroupNorm(Module):
         channelsClustering = zeros_like(clusters, device=global_vars.device)
         for g in range(numGruops):
             for i in range(groupSize):
-                channelsClustering[indexes[g * groupSize + i]] = g * groupSize + i
+                channelsClustering[
+                    indexes[g * groupSize + i]] = g * groupSize + i
 
         return channelsClustering
 
@@ -266,15 +459,9 @@ class SimilarityGroupNorm(Module):
         return torch.from_numpy(sorted_indexes)
 
     def SortChannelsV8(self, channels_input):
-        N, C, H, W = channels_input.size()
-        input_N_C_WH = channels_input.reshape(N * C, H * W)
-        mean = input_N_C_WH.mean(dim=1)
-        var = input_N_C_WH.var(dim=1)
 
-        # harmonic mean
-        sort_metric = 2 * (mean * var) / (mean + var)
+        sort_metric = self.harmonic_mean(channels_input)
 
         channelsClustering = torch.argsort(sort_metric)
 
         return channelsClustering
-

@@ -14,11 +14,11 @@
   "seed": 0,
   "shuf_each_batch": false,
   "group_by_size": true,
-  "use_wandb": true,
+  "use_wandb": false,
   "group_norm_size": 16,
   "plot_std": false,
   "epoch_start_cluster": 0,
-  "cluster_last_batch": true,
+  "cluster_last_batch": false,
   "classes_to_train":
   [
     "apple",
