@@ -109,6 +109,10 @@ class SimilarityGroupNorm(Module):
         elif global_vars.args.SGN_version == 8:
             channelsClustering = self.SortChannelsV8(channels_input)
 
+        # grouping using harmonic mean
+        elif global_vars.args.SGN_version == 9:
+            channelsClustering = self.SortChannelsV9(channels_input)
+
         else:
             print(
                 f"SGN_version number {global_vars.args.SGN_version} is not available!")
@@ -465,3 +469,18 @@ class SimilarityGroupNorm(Module):
         channelsClustering = torch.argsort(sort_metric)
 
         return channelsClustering
+
+    def SortChannelsV9(self, channels_input):
+
+        N, C, H, W = channels_input.size()
+        channelsClustering = torch.zeros((N*C))
+
+        for b in range(N):
+            sort_metric = self.harmonic_mean(channels_input[b].view(1,C,H,W))
+            channelsClustering[b*C:(b+1)*C] = torch.argsort(sort_metric)
+
+        factors = torch.arange(0, N) * C
+        channelsClustering = \
+            (channelsClustering.reshape(N, C) + factors.unsqueeze(1)).view(-1)
+
+        return channelsClustering.to(channels_input.device)
