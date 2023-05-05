@@ -27,7 +27,7 @@ parser.add_argument('-b', '--batch_size', default=32, type=int, metavar='N',
                     help='mini-batch size (default: 32)')
 parser.add_argument('-rbs', '--reclustring_bs', default=512, type=int,
                     metavar='N',
-                    help='mini-batch size for channels reclustring (default: 2048)')
+                    help='mini-batch sifze for channels reclustring (default: 2048)')
 parser.add_argument('--lr', '--learning_rate', default=0.01, type=float,
                     metavar='LR',
                     help='initial learning rate (default: 0.01)')
@@ -299,6 +299,9 @@ def generate_wandb_name():
         wanda_test_name += f'_gs-{args.group_norm_size}'
     else:
         wanda_test_name += f'_num-of-groups-{args.group_norm}'
+
+    if args.load:
+        wanda_test_name += f'_{os.path.splitext(os.path.basename(args.load))[0]}'
 
     return wanda_test_name
 
