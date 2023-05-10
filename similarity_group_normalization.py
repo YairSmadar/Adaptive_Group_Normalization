@@ -109,9 +109,14 @@ class SimilarityGroupNorm(Module):
         elif global_vars.args.SGN_version == 8:
             channelsClustering = self.SortChannelsV8(channels_input)
 
-        # grouping using harmonic mean
+        # grouping using harmonic mean, limit for shuff in the same image
         elif global_vars.args.SGN_version == 9:
             channelsClustering = self.SortChannelsV9(channels_input)
+
+        # grouping using harmonic mean, limit for shuff the same in all images
+        elif global_vars.args.SGN_version == 10:
+            channelsClustering = self.SortChannelsV10(channels_input)
+
 
         else:
             print(
@@ -123,17 +128,21 @@ class SimilarityGroupNorm(Module):
 
         return channelsClustering
 
-    def harmonic_mean(self, _tensor):
+    def harmonic_mean(self, _tensor, dim=1):
         """
         Calculate the harmonic mean of 2 tensors, for the var and mean of
         the tensor.
         """
         if _tensor.dim() == 4:
             N, C, H, W = _tensor.size()
-            input_NC_WH = _tensor.reshape(N * C, H * W)
 
-            mean = input_NC_WH.mean(dim=1)
-            var = input_NC_WH.var(dim=1)
+            if dim == 1:
+                target_tensor = _tensor.reshape(N * C, H * W)
+            else:
+                target_tensor = _tensor
+
+            mean = target_tensor.mean(dim=dim)
+            var = target_tensor.var(dim=dim)
 
         elif _tensor.dim() == 2:
             mean = _tensor.mean()
@@ -145,7 +154,15 @@ class SimilarityGroupNorm(Module):
 
     def get_channels_clustering_for_eval(self, channels_input: torch.Tensor,
                                          channelsClustering: torch.Tensor):
+
         N, C, _, _ = channels_input.size()
+
+        if global_vars.args.SGN_version == 10:
+            self.eval_indexes = channelsClustering
+            self.eval_reverse_indexes = torch.argsort(self.eval_indexes).to(
+                channels_input.device)
+            return
+
         channel_groups = {i: [] for i in range(C)}
         for i in range(N*C):
             channel_to = channelsClustering[i] % C
@@ -480,6 +497,19 @@ class SimilarityGroupNorm(Module):
             channelsClustering[b*C:(b+1)*C] = torch.argsort(sort_metric)
 
         factors = torch.arange(0, N) * C
+        channelsClustering = \
+            (channelsClustering.reshape(N, C) + factors.unsqueeze(1)).view(-1)
+
+        return channelsClustering.to(channels_input.device)
+
+    def SortChannelsV10(self, channels_input):
+        N, C, H, W = channels_input.size()
+
+        sort_metric = self.harmonic_mean(_tensor=channels_input, dim=(0, 2, 3))
+        channelsClustering = torch.argsort(sort_metric)
+
+        factors = torch.arange(0, N) * C
+        channelsClustering = torch.cat([channelsClustering] * N)
         channelsClustering = \
             (channelsClustering.reshape(N, C) + factors.unsqueeze(1)).view(-1)
 
