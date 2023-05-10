@@ -1,8 +1,8 @@
 {
   "model_version": 1,
   "SGN_version": 10,
-  "RGN_version": 1,
-  "method": "SGN",
+  "RGN_version": 2,
+  "method": "RGN",
   "epochs": 100,
   "batch_size": 16,
   "learning_rate": 0.001,
