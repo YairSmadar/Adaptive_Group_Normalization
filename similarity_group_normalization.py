@@ -508,8 +508,9 @@ class SimilarityGroupNorm(Module):
         sort_metric = self.harmonic_mean(_tensor=channels_input, dim=(0, 2, 3))
         channelsClustering = torch.argsort(sort_metric)
 
-        factors = torch.arange(0, N) * C
+        factors = (torch.arange(0, N) * C).to(channels_input.device)
         channelsClustering = torch.cat([channelsClustering] * N)
+        channelsClustering = channelsClustering.to(channels_input.device)
         channelsClustering = \
             (channelsClustering.reshape(N, C) + factors.unsqueeze(1)).view(-1)
 
