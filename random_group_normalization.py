@@ -78,10 +78,12 @@ class RandomGroupNorm(Module):
         elif RGN_version == 2:
             self.indexes = sort(randperm(C, generator=global_vars.generator))[1].to(
                                             Conv_input.device)
-            factors = torch.arange(0, N) * C
+            factors = (torch.arange(0, N) * C).to(Conv_input.device)
             self.indexes = torch.cat([self.indexes] * N)
             self.indexes = \
                 (self.indexes.reshape(N, C) + factors.unsqueeze(1)).view(-1)
+            self.indexes = self.indexes.to(
+                Conv_input.device)  # Move self.indexes to the same device as Conv_input
             self.reverse_indexes = torch.argsort(self.indexes).to(
                 Conv_input.device)
 
