@@ -8,12 +8,13 @@ from similarity_group_normalization import SimilarityGroupNorm as sgn
 
 
 def resnet50():
-    model = ResNet(Bottleneck, [3, 4, 6, 3])
+    model = ResNet(Bottleneck, [3, 4, 6, 3],
+                   dropout_p=global_vars.args.dropout_prop)
     return model
 
 
 class ResNet(nn.Module):
-    def __init__(self, block, layers, num_classes=100):
+    def __init__(self, block, layers, num_classes=100, dropout_p=0.2):
         super(ResNet, self).__init__()
         self.method = global_vars.args.method
         self.group_norm = global_vars.args.group_norm
@@ -30,6 +31,7 @@ class ResNet(nn.Module):
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
         self.avgpool = nn.AvgPool2d(4, stride=1)
+        self.dropout = nn.Dropout(dropout_p)
         self.fc = nn.Linear(512 * block.expansion, num_classes)
 
         for m in self.modules():
@@ -103,6 +105,8 @@ class ResNet(nn.Module):
         x = self.layer4(x)
         x = self.avgpool(x)
         x = x.view(x.size(0), -1)
+        if global_vars.args.model_version == 2:
+            x = self.dropout(x)
         x = self.fc(x)
         return x
 

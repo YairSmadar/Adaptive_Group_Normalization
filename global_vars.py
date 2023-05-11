@@ -99,7 +99,8 @@ parser.add_argument('--RGN_version', default=1, type=int,
                     help='RGN metric version.')
 parser.add_argument('--model_version', default=1, type=int,
                     help='Model version'
-                         '1: Original ResNet50')
+                         '1: Original ResNet50'
+                         '2: 1 + one dropout before last fc')
 parser.add_argument('--code_version', default=1, type=int, help='Code version')
 parser.add_argument('--use_wandb', default=False, action="store_true",
                     help='use weights&biases')
@@ -108,6 +109,9 @@ parser.add_argument('--epoch_start_cluster', default=0,
 parser.add_argument('--cluster_last_batch', default=False, action="store_true",
                     help='when getting to epoch of clustering, cluster at'
                          'last epoch. default=cluster in the first epoch')
+parser.add_argument('--dropout_prop', default=0.2, type=float,
+                    help='dropout probability')
+
 
 
 def apply_config(args: Namespace, config_path: str):
