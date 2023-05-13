@@ -304,6 +304,8 @@ def generate_wandb_name():
     else:
         wanda_test_name += f'_num-of-groups-{args.group_norm}'
 
+    wanda_test_name += f'du-{args.dropout_prop}'
+
     if args.load:
         wanda_test_name += f'_{os.path.splitext(os.path.basename(args.load))[0]}'
 
