@@ -19,6 +19,7 @@
   "plot_std": false,
   "epoch_start_cluster": 0,
   "cluster_last_batch": false,
+  "dropout_prop": 0.3,
   "classes_to_train":
   [
     "apple",
