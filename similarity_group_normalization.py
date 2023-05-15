@@ -64,15 +64,12 @@ class SimilarityGroupNorm(Module):
         return ret
 
     def recluster(self, Conv_input):
-        N, C, W, H = Conv_input.size()
         self.indexes = self.SimilarityGroupNormClustering(clone(Conv_input),
                                                           self.num_groups).to(
             dtype=torch.int64)
 
-        self.reverse_indexes = empty_like(self.indexes)
-        for ind in range(N * C):
-            self.reverse_indexes[self.indexes[ind]] = tensor(ind,
-                                                             device=global_vars.device)
+        self.reverse_indexes = torch.argsort(self.eval_indexes).to(
+            Conv_input.device)
 
     def SimilarityGroupNormClustering(self, channels_input, numGruops):
         N, C, H, W = channels_input.size()
@@ -117,6 +114,11 @@ class SimilarityGroupNorm(Module):
         elif global_vars.args.SGN_version == 10:
             channelsClustering = self.SortChannelsV10(channels_input)
 
+        # grouping using harmonic mean for each channel,
+        # select most for each group, limit for shuff the same in all images
+        elif global_vars.args.SGN_version == 11:
+            channelsClustering = self.SortChannelsV11(channels_input)
+
 
         else:
             print(
@@ -124,7 +126,7 @@ class SimilarityGroupNorm(Module):
             exit(1)
 
         self.get_channels_clustering_for_eval(channels_input,
-                                            channelsClustering)
+                                              channelsClustering)
 
         return channelsClustering
 
@@ -152,19 +154,15 @@ class SimilarityGroupNorm(Module):
 
         return 2 * (mean * var) / (mean + var)
 
-    def get_channels_clustering_for_eval(self, channels_input: torch.Tensor,
-                                         channelsClustering: torch.Tensor):
+    def select_channels_indices_according_to_the_most(
+            self,
+            channels_input: torch.Tensor,
+            channelsClustering: torch.Tensor):
 
         N, C, _, _ = channels_input.size()
 
-        if global_vars.args.SGN_version == 10:
-            self.eval_indexes = channelsClustering
-            self.eval_reverse_indexes = torch.argsort(self.eval_indexes).to(
-                channels_input.device)
-            return
-
         channel_groups = {i: [] for i in range(C)}
-        for i in range(N*C):
+        for i in range(N * C):
             channel_to = channelsClustering[i] % C
             group_num = self.map_to_group(i)
             channel_groups[channel_to.item()].append(group_num)
@@ -185,7 +183,8 @@ class SimilarityGroupNorm(Module):
             # Get the corresponding index and group of the maximum value
             neg_max_value, channel_num, group = heapq.heappop(min_heap)
 
-            if len(final_channel_groups[group]) < self.group_size and channel_num not in added_indices:
+            if len(final_channel_groups[
+                       group]) < self.group_size and channel_num not in added_indices:
                 final_channel_groups[group].append(channel_num)
                 added_indices.add(channel_num)
 
@@ -195,7 +194,8 @@ class SimilarityGroupNorm(Module):
                 break
 
         # Flatten the lists in the dictionary
-        flat_list = [elem for lst in final_channel_groups.values() for elem in lst]
+        flat_list = [elem for lst in final_channel_groups.values() for elem in
+                     lst]
 
         # Convert the flattened list to a PyTorch tensor
         factors = torch.arange(0, N) * C
@@ -203,11 +203,27 @@ class SimilarityGroupNorm(Module):
         eval_indexes = torch.tensor(flat_list)
         eval_indexes = \
             eval_indexes.repeat(N).reshape(N, C) + factors.unsqueeze(1)
-        self.eval_indexes = eval_indexes.reshape(-1).to(
+        eval_indexes = eval_indexes.reshape(-1).to(channels_input.device)
+
+        return eval_indexes
+
+    def get_channels_clustering_for_eval(self, channels_input: torch.Tensor,
+                                         channelsClustering: torch.Tensor):
+
+        # in case the channels are shuffle the same for every image
+        if global_vars.args.SGN_version >= 10:
+            self.eval_indexes = channelsClustering
+            self.eval_reverse_indexes = torch.argsort(self.eval_indexes).to(
                 channels_input.device)
 
+            return
+
+        self.eval_indexes = self.select_channels_indices_according_to_the_most(
+            channels_input, channelsClustering
+        )
+
         self.eval_reverse_indexes = torch.argsort(self.eval_indexes).to(
-                channels_input.device)
+            channels_input.device)
 
     def remove_elements_with_same_value_from_heap(self, heap, i):
         elements_to_push_back = []
@@ -221,7 +237,7 @@ class SimilarityGroupNorm(Module):
             heapq.heappush(heap, element)
 
     def get_num_occurrences(self, d):
-        num_counts = {i: [0]*self.num_groups for i in range(len(d))}
+        num_counts = {i: [0] * self.num_groups for i in range(len(d))}
 
         for i, lst in enumerate(d.values()):
             for num in lst:
@@ -275,12 +291,14 @@ class SimilarityGroupNorm(Module):
 
             for b in range(batch_size):
                 # Calculate the representative number for each channel
-                channel_reps = torch.empty(self.num_channels, device=tensor.device)
+                channel_reps = torch.empty(self.num_channels,
+                                           device=tensor.device)
                 for i in range(self.num_channels):
                     channel_reps[i] = metric(tensor[b, i, :, :]).item()
 
                 # Compute the distance between each channel and all representative numbers
-                distances = torch.abs(channel_reps.view(-1, 1) - torch.tensor(self.groups_representation_num, device=tensor.device))
+                distances = torch.abs(channel_reps.view(-1, 1) - torch.tensor(
+                    self.groups_representation_num, device=tensor.device))
 
                 # Initialize the groups and available channels
                 channel_groups = {i: [] for i in range(self.num_groups)}
@@ -490,11 +508,11 @@ class SimilarityGroupNorm(Module):
     def SortChannelsV9(self, channels_input):
 
         N, C, H, W = channels_input.size()
-        channelsClustering = torch.zeros((N*C))
+        channelsClustering = torch.zeros((N * C))
 
         for b in range(N):
-            sort_metric = self.harmonic_mean(channels_input[b].view(1,C,H,W))
-            channelsClustering[b*C:(b+1)*C] = torch.argsort(sort_metric)
+            sort_metric = self.harmonic_mean(channels_input[b].view(1, C, H, W))
+            channelsClustering[b * C:(b + 1) * C] = torch.argsort(sort_metric)
 
         factors = torch.arange(0, N) * C
         channelsClustering = \
@@ -515,3 +533,11 @@ class SimilarityGroupNorm(Module):
             (channelsClustering.reshape(N, C) + factors.unsqueeze(1)).view(-1)
 
         return channelsClustering.to(channels_input.device)
+
+    def SortChannelsV11(self, channels_input):
+        channelsClustering = self.SortChannelsV8(channels_input)
+        channelsClustering = self.select_channels_indices_according_to_the_most(
+            channels_input, channelsClustering
+        )
+
+        return channelsClustering

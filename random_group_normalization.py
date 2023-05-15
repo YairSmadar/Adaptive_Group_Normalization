@@ -1,7 +1,6 @@
 import torch
-from torch import tensor, sort, randperm, empty_like
+from torch import sort, randperm
 from torch.nn import Module, GroupNorm
-import numpy as np
 import global_vars
 from agn_utils import getLayerIndex
 

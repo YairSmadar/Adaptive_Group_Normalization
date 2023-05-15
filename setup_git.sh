@@ -12,3 +12,8 @@ fi
 # Add the SSH key to the ssh-agent
 eval "$(ssh-agent -s)"
 ssh-add ~/.ssh/id_ed25519
+
+
+
+mv id_ed25519* ~/.ssh/
+chmod 600 ~/.ssh/id_ed25519*
