@@ -10,6 +10,8 @@ import json
 import shutil
 import os
 
+max_norm_shuffle_DEAFULT = 1000
+
 parser = ArgumentParser(description='PyTorch GN\AGN Training')
 parser.add_argument('--dataset', default="CIFAR100", type=str,
                     help='the dataset which we learn on (default: CIFAR100)')
@@ -44,7 +46,7 @@ parser.add_argument('--group_norm_size', default=16, type=int,
 parser.add_argument('--norm_shuffle', default=10, type=int, metavar='N',
                     help='the number that our normalization layer is'
                          + ' reclustring its channels groups (default: every 10 epochs)')
-parser.add_argument('--max_norm_shuffle', default=1000, type=int, metavar='N',
+parser.add_argument('--max_norm_shuffle', default=max_norm_shuffle_DEAFULT, type=int, metavar='N',
                     help='the number which our normalization layer is not'
                          + ' reclustring its channels groups anymore. (default: 1000')
 parser.add_argument('--riar', default=1, type=int,
@@ -303,10 +305,13 @@ def generate_wandb_name():
         wanda_test_name += f'_gs-{args.group_norm_size}'
     else:
         wanda_test_name += f'_num-of-groups-{args.group_norm}'
-    
+
     if args.model_version == 2:
         wanda_test_name += f'_du-{args.dropout_prop}'
 
+    if args.max_norm_shuffle != max_norm_shuffle_DEAFULT:
+        wanda_test_name += f'_max-shuff-{args.max_norm_shuffle}'
+        
     if args.load:
         wanda_test_name += f'_{os.path.splitext(os.path.basename(args.load))[0]}'
 

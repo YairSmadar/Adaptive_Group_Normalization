@@ -1,6 +1,6 @@
 {
-  "model_version": 2,
-  "SGN_version": 11,
+  "model_version": 1,
+  "SGN_version": 10,
   "RGN_version": 2,
   "method": "SGN",
   "epochs": 100,
@@ -20,6 +20,7 @@
   "epoch_start_cluster": 0,
   "cluster_last_batch": false,
   "dropout_prop": 0.3,
+  "max_norm_shuffle": 70,
   "classes_to_train":
   [
     "apple",
