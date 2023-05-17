@@ -6,6 +6,9 @@ import global_vars
 from agn_utils import getLayerIndex
 import heapq
 
+if global_vars.args.plot_groups:
+    import matplotlib.pyplot as plt
+
 
 class SimilarityGroupNorm(Module):
     def __init__(self, num_groups: int, num_channels: int = 32, eps=1e-12):
@@ -118,6 +121,9 @@ class SimilarityGroupNorm(Module):
         # select most for each group, limit for shuff the same in all images
         elif global_vars.args.SGN_version == 11:
             channelsClustering = self.SortChannelsV11(channels_input)
+
+        elif global_vars.args.SGN_version == 12:
+            channelsClustering = self.SortChannelsV12(channels_input)
 
 
         else:
@@ -352,6 +358,16 @@ class SimilarityGroupNorm(Module):
         #     norm_df[:, i] = normalize(norm_df[:, i], dim=-1, eps=self.eps)
         return norm_df, df
 
+    def create_shuff_for_total_batch(self, channels_input, channelsClustering):
+        N, C, H, W = channels_input.size()
+        factors = (torch.arange(0, N) * C).to(channels_input.device)
+        channelsClustering = torch.cat([channelsClustering] * N)
+        channelsClustering = channelsClustering.to(channels_input.device)
+        channelsClustering = \
+            (channelsClustering.reshape(N, C) + factors.unsqueeze(1)).view(-1)
+
+        return channelsClustering
+
     # grouping as far channels, (mean/var)*(mean+var), range in group: numGruops
     def SortChannelsV1(self, channels_input, numGruops):
         N, C, H, W = channels_input.size()
@@ -502,6 +518,13 @@ class SimilarityGroupNorm(Module):
         sort_metric = self.harmonic_mean(channels_input)
 
         channelsClustering = torch.argsort(sort_metric)
+        if global_vars.args.plot_groups:
+            N, C, H, W = channels_input.size()
+            t = channels_input.reshape(N * C, H * W)
+            channel_means = t.mean(dim=1)
+            channel_vars = t.var(dim=1)
+
+            self.plot_groups(channelsClustering, channel_means, channel_vars)
 
         return channelsClustering
 
@@ -524,13 +547,19 @@ class SimilarityGroupNorm(Module):
         N, C, H, W = channels_input.size()
 
         sort_metric = self.harmonic_mean(_tensor=channels_input, dim=(0, 2, 3))
-        channelsClustering = torch.argsort(sort_metric)
+        order = torch.argsort(sort_metric)
 
         factors = (torch.arange(0, N) * C).to(channels_input.device)
-        channelsClustering = torch.cat([channelsClustering] * N)
+        channelsClustering = torch.cat([order] * N)
         channelsClustering = channelsClustering.to(channels_input.device)
         channelsClustering = \
             (channelsClustering.reshape(N, C) + factors.unsqueeze(1)).view(-1)
+
+        if global_vars.args.plot_groups:
+            channel_means = channels_input.mean(dim=(0, 2, 3))
+            channel_vars = channels_input.var(dim=(0, 2, 3))
+
+            self.plot_groups(order, channel_means, channel_vars)
 
         return channelsClustering.to(channels_input.device)
 
@@ -541,3 +570,56 @@ class SimilarityGroupNorm(Module):
         )
 
         return channelsClustering
+
+    def SortChannelsV12(self, channels_input):
+
+        from scipy.cluster.hierarchy import linkage, leaves_list
+
+        N, C, W, H = channels_input.size()
+        # Calculate the mean and variance for each channel
+        channel_means = torch.mean(channels_input, dim=(0, 2, 3))
+        channel_vars = torch.var(channels_input, dim=(0, 2, 3))
+
+        # Stack the means and vars together to form a new tensor of shape (C, 2)
+        channels = torch.stack((channel_means, channel_vars), dim=1)
+
+        # Calculate the pairwise Euclidean distance
+        distances = torch.cdist(channels, channels, p=2)
+
+        # Fill the diagonal with a large value
+        distances.fill_diagonal_(float('inf'))
+
+        # Convert the distance matrix to a condensed distance matrix
+        # (i.e., a flat array containing the upper triangular of the distance matrix)
+        distances_condensed = distances[np.triu_indices(C, k=1)].detach().numpy()
+
+        # Perform hierarchical/agglomerative clustering
+        linkage_matrix = linkage(distances_condensed, method='average')
+
+        # Get the order of channels
+        order = leaves_list(linkage_matrix)
+
+        ret = self.create_shuff_for_total_batch(channels_input, torch.from_numpy(order))
+
+        if global_vars.args.plot_groups:
+            self.plot_groups(order, channel_means, channel_vars)
+
+        return ret.to(channels_input.device)
+
+    def plot_groups(self, channels_groups, means, vars):
+        groups = torch.repeat_interleave(torch.arange(self.num_groups),
+                                         len(channels_groups) // self.num_groups,
+                                         dim=0)
+        # groups = np.repeat(np.arange(self.num_groups),
+        #                    len(channels_groups) / self.num_groups)
+
+        # Create a scatter plot with points colored by group
+        plt.figure(figsize=(10, 10))
+        plt.scatter(means[channels_groups].detach().numpy(),
+                    vars[channels_groups].detach().numpy(), c=groups,
+                    cmap='tab20', alpha=0.5)
+
+        # Optionally, add a colorbar
+        plt.colorbar(label='Group')
+
+        plt.show()

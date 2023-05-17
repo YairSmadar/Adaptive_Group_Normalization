@@ -83,6 +83,8 @@ parser.add_argument('--classes_to_train', nargs='+', default=[],
                     help='two names of classes (like bear/wolf')
 parser.add_argument('--plot_std', default=False, action="store_true",
                     help='plot std for first batch')
+parser.add_argument('--plot_groups', default=False, action="store_true",
+                    help='plot groups')
 parser.add_argument('--save_shuff_idxs', default=False, action="store_true",
                     help='Save shuffle indexes of the full epoch and apply them on the rest of the epoch')
 parser.add_argument('--config', type=str, default='',

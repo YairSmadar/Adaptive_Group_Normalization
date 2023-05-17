@@ -1,6 +1,6 @@
 {
   "model_version": 1,
-  "SGN_version": 10,
+  "SGN_version": 8,
   "RGN_version": 2,
   "method": "SGN",
   "epochs": 100,
@@ -17,6 +17,7 @@
   "use_wandb": false,
   "group_norm_size": 16,
   "plot_std": false,
+  "plot_groups": true,
   "epoch_start_cluster": 0,
   "cluster_last_batch": false,
   "dropout_prop": 0.3,
