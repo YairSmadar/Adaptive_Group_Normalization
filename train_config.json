@@ -4,7 +4,7 @@
   "RGN_version": 1,
   "method": "SGN",
   "epochs": 100,
-  "batch_size": 16,
+  "batch_size": 8,
   "learning_rate": 0.001,
   "group_norm": 16,
   "norm_shuffle": 20,

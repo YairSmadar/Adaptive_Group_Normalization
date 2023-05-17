@@ -311,7 +311,7 @@ def generate_wandb_name():
 
     if args.max_norm_shuffle != max_norm_shuffle_DEAFULT:
         wanda_test_name += f'_max-shuff-{args.max_norm_shuffle}'
-        
+
     if args.load:
         wanda_test_name += f'_{os.path.splitext(os.path.basename(args.load))[0]}'
 
