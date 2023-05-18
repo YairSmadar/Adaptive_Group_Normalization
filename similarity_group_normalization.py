@@ -6,6 +6,7 @@ import global_vars
 from agn_utils import getLayerIndex
 import heapq
 from scipy.cluster.hierarchy import linkage, leaves_list
+from k_means_constrained import KMeansConstrained
 
 if global_vars.args.plot_groups:
     import matplotlib.pyplot as plt
@@ -125,6 +126,9 @@ class SimilarityGroupNorm(Module):
 
         elif global_vars.args.SGN_version == 12:
             channelsClustering = self.SortChannelsV12(channels_input)
+
+        elif global_vars.args.SGN_version == 13:
+            channelsClustering = self.SortChannelsV13(channels_input)
 
 
         else:
@@ -602,6 +606,40 @@ class SimilarityGroupNorm(Module):
 
         if global_vars.args.plot_groups:
             self.plot_groups(order, channel_means, channel_vars)
+
+        return ret.to(channels_input.device)
+
+    def SortChannelsV13(self, channels_input):
+        # Calculate the mean and variance for each channel
+        channel_means = torch.mean(channels_input, dim=(0, 2, 3))
+        channel_vars = torch.var(channels_input, dim=(0, 2, 3))
+
+        # Create a 2D tensor where each row is a channel
+        # and the columns are the mean and variance
+        channel_stats = torch.stack((channel_means, channel_vars), dim=1)
+
+        # Perform constrained k-means clustering on the channel statistics
+        kmeans = KMeansConstrained(n_clusters=self.num_groups,
+                                   size_min=self.group_size,
+                                   size_max=self.group_size,
+                                   random_state=global_vars.args.seed)
+        kmeans.fit(channel_stats.cpu().detach().numpy())
+
+        # The labels_ attribute of the fitted model
+        # gives the group for each channel
+        groups = kmeans.labels_
+
+        # Get the indices that would sort the groups
+        new_order = np.argsort(groups)
+
+        ret = self.create_shuff_for_total_batch(channels_input,
+                                                torch.from_numpy(new_order))
+
+        if global_vars.args.plot_groups:
+            channel_means = channels_input.mean(dim=(0, 2, 3))
+            channel_vars = channels_input.var(dim=(0, 2, 3))
+
+            self.plot_groups(new_order, channel_means, channel_vars)
 
         return ret.to(channels_input.device)
 
