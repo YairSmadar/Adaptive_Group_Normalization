@@ -6,3 +6,4 @@ argparse
 pandas
 matplotlib
 ipython
+scipy

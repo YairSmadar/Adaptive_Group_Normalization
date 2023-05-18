@@ -1,10 +1,11 @@
 import numpy as np
 import torch
-from torch import clone, empty_like, tensor, sort, zeros_like, cat, ceil, floor
+from torch import clone, tensor, sort, zeros_like, cat, ceil, floor
 from torch.nn import Module, GroupNorm
 import global_vars
 from agn_utils import getLayerIndex
 import heapq
+from scipy.cluster.hierarchy import linkage, leaves_list
 
 if global_vars.args.plot_groups:
     import matplotlib.pyplot as plt
@@ -573,8 +574,6 @@ class SimilarityGroupNorm(Module):
 
     def SortChannelsV12(self, channels_input):
 
-        from scipy.cluster.hierarchy import linkage, leaves_list
-
         N, C, W, H = channels_input.size()
         # Calculate the mean and variance for each channel
         channel_means = torch.mean(channels_input, dim=(0, 2, 3))
@@ -591,7 +590,7 @@ class SimilarityGroupNorm(Module):
 
         # Convert the distance matrix to a condensed distance matrix
         # (i.e., a flat array containing the upper triangular of the distance matrix)
-        distances_condensed = distances[np.triu_indices(C, k=1)].detach().numpy()
+        distances_condensed = distances[np.triu_indices(C, k=1)].cpu().detach().numpy()
 
         # Perform hierarchical/agglomerative clustering
         linkage_matrix = linkage(distances_condensed, method='average')
