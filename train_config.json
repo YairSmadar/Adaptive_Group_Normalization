@@ -20,7 +20,7 @@
   "epoch_start_cluster": 10,
   "cluster_last_batch": false,
   "dropout_prop": 0.3,
-  "max_norm_shuffle": 70,
+  "max_norm_shuffle": 50,
   "classes_to_train":
   [
     "all"
