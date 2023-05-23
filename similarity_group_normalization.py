@@ -669,6 +669,7 @@ class SimilarityGroupNorm(Module):
 
         # calculate the number of valid (non-zero) values for each channel
         valid_counts = torch.sum(mask, dim=(0, 2, 3))
+        valid_counts[valid_counts == 0] = 1
 
         # compute the sum of the non-outlier channels
         sum_vals = torch.sum(channels_input * mask, dim=(0, 2, 3))
