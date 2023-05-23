@@ -662,10 +662,14 @@ class SimilarityGroupNorm(Module):
         C_indices = outliers % C
 
         # create a mask of ones with the same shape as the input
-        mask = torch.ones_like(channels_input)
+        mask = torch.ones_like(channels_input).to(channels_input.device)
 
-        # set the values of the outlier channels in the mask to zero
-        mask[N_indices, C_indices, :, :] = 0
+        # convert N_indices and C_indices to tensors
+        N_indices = torch.tensor(N_indices).to(channels_input.device)
+        C_indices = torch.tensor(C_indices).to(channels_input.device)
+
+        for i in range(len(outliers)):
+            mask[N_indices[i], C_indices[i], :, :] = 0
 
         # calculate the number of valid (non-zero) values for each channel
         valid_counts = torch.sum(mask, dim=(0, 2, 3))
