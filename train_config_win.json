@@ -1,7 +1,8 @@
 {
   "model_version": 1,
-  "SGN_version": 8,
+  "SGN_version": 14,
   "RGN_version": 2,
+  "load": "init_weights\\W1.pt",
   "method": "SGN",
   "epochs": 100,
   "batch_size": 16,

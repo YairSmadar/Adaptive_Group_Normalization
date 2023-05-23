@@ -7,6 +7,7 @@ from agn_utils import getLayerIndex
 import heapq
 from scipy.cluster.hierarchy import linkage, leaves_list
 from k_means_constrained import KMeansConstrained
+from sklearn.ensemble import IsolationForest
 
 if global_vars.args.plot_groups:
     import matplotlib.pyplot as plt
@@ -129,6 +130,9 @@ class SimilarityGroupNorm(Module):
 
         elif global_vars.args.SGN_version == 13:
             channelsClustering = self.SortChannelsV13(channels_input)
+
+        elif global_vars.args.SGN_version == 14:
+            channelsClustering = self.SortChannelsV14(channels_input)
 
 
         else:
@@ -614,6 +618,84 @@ class SimilarityGroupNorm(Module):
         channel_means = torch.mean(channels_input, dim=(0, 2, 3))
         channel_vars = torch.var(channels_input, dim=(0, 2, 3))
 
+        # Get the indices that would sort the groups
+        new_order = self.KMeans_2D(channel_vars, channel_means)
+
+        ret = self.create_shuff_for_total_batch(channels_input,
+                                                torch.from_numpy(new_order))
+
+        if global_vars.args.plot_groups:
+            channel_means = channels_input.mean(dim=(0, 2, 3))
+            channel_vars = channels_input.var(dim=(0, 2, 3))
+
+            self.plot_groups(new_order, channel_means, channel_vars)
+
+        return ret.to(channels_input.device)
+
+    def SortChannelsV14(self, channels_input):
+
+        N, C, W, H = channels_input.size()
+
+        mean_vals = torch.mean(channels_input, dim=(2, 3))
+        var_vals = torch.var(channels_input, dim=(2, 3))
+
+        # Reshape to (N*C)
+        mean_vals = mean_vals.view(-1,1)
+        var_vals = var_vals.view(-1,1)
+
+        # Concatenate mean_vals and var_vals along the channel dimension
+        feature_vecs = torch.cat((mean_vals, var_vals), dim=-1)
+
+        # Convert to a numpy array
+        feature_vecs_np = feature_vecs.cpu().detach().numpy()
+
+        # Assuming feature_vecs_np is your data (mean, var pairs)
+        iso_forest = IsolationForest(
+            contamination=0.1)  # adjust contamination as needed
+        outliers = iso_forest.fit_predict(feature_vecs_np)
+
+        # Indices of inliers
+        outliers = np.where(outliers == -1)[0]
+
+        # calculate the N and C indices for each element of the outliers tensor
+        N_indices = outliers // C
+        C_indices = outliers % C
+
+        # create a mask of ones with the same shape as the input
+        mask = torch.ones_like(channels_input)
+
+        # set the values of the outlier channels in the mask to zero
+        mask[N_indices, C_indices, :, :] = 0
+
+        # calculate the number of valid (non-zero) values for each channel
+        valid_counts = torch.sum(mask, dim=(0, 2, 3))
+
+        # compute the sum of the non-outlier channels
+        sum_vals = torch.sum(channels_input * mask, dim=(0, 2, 3))
+
+        # compute the mean of the non-outlier channels
+        mean_vals = sum_vals / valid_counts
+
+        # compute the variance of the non-outlier channels
+        var_vals = torch.sum(
+            mask * (channels_input - mean_vals.view(1, -1, 1, 1)) ** 2,
+            dim=(0, 2, 3)) / valid_counts
+
+        new_order = self.KMeans_2D(var_vals, mean_vals)
+
+        ret = self.create_shuff_for_total_batch(channels_input,
+                                                torch.from_numpy(new_order))
+
+        if global_vars.args.plot_groups:
+            channel_means = channels_input.mean(dim=(0, 2, 3))
+            channel_vars = channels_input.var(dim=(0, 2, 3))
+
+            self.plot_groups(new_order, channel_means, channel_vars)
+
+        return ret.to(channels_input.device)
+
+    def KMeans_2D(self, channel_vars, channel_means):
+
         # Create a 2D tensor where each row is a channel
         # and the columns are the mean and variance
         channel_stats = torch.stack((channel_means, channel_vars), dim=1)
@@ -632,16 +714,7 @@ class SimilarityGroupNorm(Module):
         # Get the indices that would sort the groups
         new_order = np.argsort(groups)
 
-        ret = self.create_shuff_for_total_batch(channels_input,
-                                                torch.from_numpy(new_order))
-
-        if global_vars.args.plot_groups:
-            channel_means = channels_input.mean(dim=(0, 2, 3))
-            channel_vars = channels_input.var(dim=(0, 2, 3))
-
-            self.plot_groups(new_order, channel_means, channel_vars)
-
-        return ret.to(channels_input.device)
+        return new_order
 
     def plot_groups(self, channels_groups, means, vars):
         groups = torch.repeat_interleave(torch.arange(self.num_groups),

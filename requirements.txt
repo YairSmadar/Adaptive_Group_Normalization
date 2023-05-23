@@ -8,3 +8,5 @@ matplotlib
 ipython
 scipy
 k-means-constrained
+ortools==9.3.10497
+sklearn
