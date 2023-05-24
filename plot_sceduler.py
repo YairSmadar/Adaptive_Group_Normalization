@@ -49,7 +49,7 @@ def main():
     plt.ylabel('lr')
     # plt.yscale('log')
     plt.xlabel('epoch')
-    plt.savefig('/content/lr_scheduler.png')
+    # plt.savefig('/content/lr_scheduler.png')
     plt.show()
     plt.close()
 

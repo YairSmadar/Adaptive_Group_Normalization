@@ -1,6 +1,6 @@
 {
   "model_version": 1,
-  "SGN_version": 15,
+  "SGN_version": 16,
   "RGN_version": 1,
   "method": "SGN",
   "epochs": 100,

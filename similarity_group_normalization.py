@@ -138,6 +138,9 @@ class SimilarityGroupNorm(Module):
         elif global_vars.args.SGN_version == 15:
             channelsClustering = self.SortChannelsV15(channels_input)
 
+        elif global_vars.args.SGN_version == 16:
+            channelsClustering = self.SortChannelsV16(channels_input)
+
         else:
             print(
                 f"SGN_version number {global_vars.args.SGN_version} is not available!")
@@ -636,10 +639,13 @@ class SimilarityGroupNorm(Module):
         return ret.to(channels_input.device)
 
     def SortChannelsV14(self, channels_input):
-        return self. SortChannelsOutliersKMeans(channels_input, method='IsolationForest')
+        return self.SortChannelsOutliersKMeans(channels_input, method='IsolationForest')
 
     def SortChannelsV15(self, channels_input):
-        return self. SortChannelsOutliersKMeans(channels_input, method='ZScore')
+        return self.SortChannelsOutliersKMeans(channels_input, method='ZScoreV1')
+
+    def SortChannelsV16(self, channels_input):
+        return self.SortChannelsOutliersKMeans(channels_input, method='ZScoreV2')
 
     def SortChannelsOutliersKMeans(self, channels_input, method='IsolationForest'):
         # Convert to a numpy array
@@ -648,13 +654,21 @@ class SimilarityGroupNorm(Module):
         # Indices of inliers/outliers
         if method == 'IsolationForest':
             outliers = self.get_outliers_IsolationForest(feature_vecs_np)
-        elif method == 'ZScore':
+        elif method == 'ZScoreV1':
             # Calculate the centroid
             centroid = np.mean(feature_vecs_np, axis=0)
             # Calculate the Euclidean distance from each point to the centroid
             distances = np.linalg.norm(feature_vecs_np - centroid, axis=1)
             # Calculate the z-score of the distances
             z_scores = zscore(distances)
+            # Absolute Z-scores > 3 are considered as outliers
+            outliers = np.abs(z_scores) > 3
+
+            outliers = np.where(outliers)[0]
+        elif method == 'ZScoreV2':
+            # Calculate Z-scores
+            z_scores = zscore(feature_vecs_np)
+
             # Absolute Z-scores > 3 are considered as outliers
             outliers = np.abs(z_scores) > 3
 
