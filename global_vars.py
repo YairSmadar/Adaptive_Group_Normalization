@@ -30,7 +30,7 @@ parser.add_argument('-b', '--batch_size', default=32, type=int, metavar='N',
 parser.add_argument('-rbs', '--reclustring_bs', default=512, type=int,
                     metavar='N',
                     help='mini-batch sifze for channels reclustring (default: 2048)')
-parser.add_argument('--lr', '--learning_rate', default=0.01, type=float,
+parser.add_argument('--lr', default=0.01, type=float,
                     metavar='LR',
                     help='initial learning rate (default: 0.01)')
 parser.add_argument('--momentum', default=0.9, type=float, metavar='M',

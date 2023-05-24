@@ -5,7 +5,7 @@
   "method": "SGN",
   "epochs": 100,
   "batch_size": 16,
-  "learning_rate": 0.001,
+  "lr": 0.01,
   "group_norm": 16,
   "norm_shuffle": 20,
   "riar": 1,
