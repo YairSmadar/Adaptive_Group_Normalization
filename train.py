@@ -66,8 +66,12 @@ def main():
             print("loading weights from:", args.load)
             State_dict = load(args.load, map_location=torch.device(global_vars.device_name))['state_dict']
             with no_grad():
-                for param1, param2 in zip(model.state_dict(), State_dict):
-                    model.state_dict()[param1].data.fill_(0).add_(State_dict[param2].data)
+                # Only update the weights if they are in both the
+                # model's and the loaded state dict
+                for param1 in model.state_dict():
+                    if param1 in State_dict:
+                        model.state_dict()[param1].data.fill_(0).add_(
+                            State_dict[param1].data)
         global_vars.zero_state_dict = deepcopy(model.state_dict())
         global_vars.save_initial_weights()
 

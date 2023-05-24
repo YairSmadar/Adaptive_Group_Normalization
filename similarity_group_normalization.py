@@ -8,6 +8,7 @@ import heapq
 from scipy.cluster.hierarchy import linkage, leaves_list
 from k_means_constrained import KMeansConstrained
 from sklearn.ensemble import IsolationForest
+from scipy.stats import zscore
 
 if global_vars.args.plot_groups:
     import matplotlib.pyplot as plt
@@ -134,6 +135,8 @@ class SimilarityGroupNorm(Module):
         elif global_vars.args.SGN_version == 14:
             channelsClustering = self.SortChannelsV14(channels_input)
 
+        elif global_vars.args.SGN_version == 15:
+            channelsClustering = self.SortChannelsV15(channels_input)
 
         else:
             print(
@@ -633,22 +636,61 @@ class SimilarityGroupNorm(Module):
         return ret.to(channels_input.device)
 
     def SortChannelsV14(self, channels_input):
-
-        N, C, W, H = channels_input.size()
-
-        mean_vals = torch.mean(channels_input, dim=(2, 3))
-        var_vals = torch.var(channels_input, dim=(2, 3))
-
-        # Reshape to (N*C)
-        mean_vals = mean_vals.view(-1,1)
-        var_vals = var_vals.view(-1,1)
-
-        # Concatenate mean_vals and var_vals along the channel dimension
-        feature_vecs = torch.cat((mean_vals, var_vals), dim=-1)
-
         # Convert to a numpy array
-        feature_vecs_np = feature_vecs.cpu().detach().numpy()
+        feature_vecs_np = self.create_mean_var_nparray(channels_input)
 
+        # Indices of inliers
+        outliers = self.get_outliers_IsolationForest(feature_vecs_np)
+
+        mean_vals, var_vals = self.get_mean_val_no_outliers(outliers, channels_input)
+
+        new_order = self.KMeans_2D(var_vals, mean_vals)
+
+        ret = self.create_shuff_for_total_batch(channels_input,
+                                                torch.from_numpy(new_order))
+
+        if global_vars.args.plot_groups:
+            channel_means = channels_input.mean(dim=(0, 2, 3))
+            channel_vars = channels_input.var(dim=(0, 2, 3))
+
+            self.plot_groups(new_order, channel_means, channel_vars)
+
+        return ret.to(channels_input.device)
+
+    def SortChannelsV15(self, channels_input):
+        # Convert to a numpy array
+        feature_vecs_np = self.create_mean_var_nparray(channels_input)
+
+        # Calculate the centroid
+        centroid = np.mean(feature_vecs_np, axis=0)
+
+        # Calculate the Euclidean distance from each point to the centroid
+        distances = np.linalg.norm(feature_vecs_np - centroid, axis=1)
+
+        # Calculate the z-score of the distances
+        z_scores = zscore(distances)
+
+        # Absolute Z-scores > 3 are considered as outliers
+        outliers = np.abs(z_scores) > 3
+
+        outlier_indices = np.where(outliers)[0]
+
+        mean_vals, var_vals = self.get_mean_val_no_outliers(outlier_indices, channels_input)
+
+        new_order = self.KMeans_2D(var_vals, mean_vals)
+
+        ret = self.create_shuff_for_total_batch(channels_input,
+                                                torch.from_numpy(new_order))
+
+        if global_vars.args.plot_groups:
+            channel_means = channels_input.mean(dim=(0, 2, 3))
+            channel_vars = channels_input.var(dim=(0, 2, 3))
+
+            self.plot_groups(new_order, channel_means, channel_vars)
+
+        return ret.to(channels_input.device)
+
+    def get_outliers_IsolationForest(self, feature_vecs_np):
         # Assuming feature_vecs_np is your data (mean, var pairs)
         iso_forest = IsolationForest(
             contamination=0.1)  # adjust contamination as needed
@@ -656,6 +698,36 @@ class SimilarityGroupNorm(Module):
 
         # Indices of inliers
         outliers = np.where(outliers == -1)[0]
+
+        return outliers
+
+
+    def KMeans_2D(self, channel_vars, channel_means):
+
+        # Create a 2D tensor where each row is a channel
+        # and the columns are the mean and variance
+        channel_stats = torch.stack((channel_means, channel_vars), dim=1)
+
+        # Perform constrained k-means clustering on the channel statistics
+        kmeans = KMeansConstrained(n_clusters=self.num_groups,
+                                   size_min=self.group_size,
+                                   size_max=self.group_size,
+                                   random_state=global_vars.args.seed)
+        kmeans.fit(channel_stats.cpu().detach().numpy())
+
+        # The labels_ attribute of the fitted model
+        # gives the group for each channel
+        groups = kmeans.labels_
+
+        # Get the indices that would sort the groups
+        new_order = np.argsort(groups)
+
+        return new_order
+
+
+    def get_mean_val_no_outliers(self, outliers, channels_input):
+
+        _, C, _, _ = channels_input.size()
 
         # calculate the N and C indices for each element of the outliers tensor
         N_indices = outliers // C
@@ -686,40 +758,23 @@ class SimilarityGroupNorm(Module):
             mask * (channels_input - mean_vals.view(1, -1, 1, 1)) ** 2,
             dim=(0, 2, 3)) / valid_counts
 
-        new_order = self.KMeans_2D(var_vals, mean_vals)
+        return mean_vals, var_vals
 
-        ret = self.create_shuff_for_total_batch(channels_input,
-                                                torch.from_numpy(new_order))
+    def create_mean_var_nparray(self, channels_input):
+        mean_vals = torch.mean(channels_input, dim=(2, 3))
+        var_vals = torch.var(channels_input, dim=(2, 3))
 
-        if global_vars.args.plot_groups:
-            channel_means = channels_input.mean(dim=(0, 2, 3))
-            channel_vars = channels_input.var(dim=(0, 2, 3))
+        # Reshape to (N*C)
+        mean_vals = mean_vals.view(-1,1)
+        var_vals = var_vals.view(-1,1)
 
-            self.plot_groups(new_order, channel_means, channel_vars)
+        # Concatenate mean_vals and var_vals along the channel dimension
+        feature_vecs = torch.cat((mean_vals, var_vals), dim=-1)
 
-        return ret.to(channels_input.device)
+        # Convert to a numpy array
+        feature_vecs_np = feature_vecs.cpu().detach().numpy()
 
-    def KMeans_2D(self, channel_vars, channel_means):
-
-        # Create a 2D tensor where each row is a channel
-        # and the columns are the mean and variance
-        channel_stats = torch.stack((channel_means, channel_vars), dim=1)
-
-        # Perform constrained k-means clustering on the channel statistics
-        kmeans = KMeansConstrained(n_clusters=self.num_groups,
-                                   size_min=self.group_size,
-                                   size_max=self.group_size,
-                                   random_state=global_vars.args.seed)
-        kmeans.fit(channel_stats.cpu().detach().numpy())
-
-        # The labels_ attribute of the fitted model
-        # gives the group for each channel
-        groups = kmeans.labels_
-
-        # Get the indices that would sort the groups
-        new_order = np.argsort(groups)
-
-        return new_order
+        return feature_vecs_np
 
     def plot_groups(self, channels_groups, means, vars):
         groups = torch.repeat_interleave(torch.arange(self.num_groups),
