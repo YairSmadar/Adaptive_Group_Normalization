@@ -636,46 +636,35 @@ class SimilarityGroupNorm(Module):
         return ret.to(channels_input.device)
 
     def SortChannelsV14(self, channels_input):
-        # Convert to a numpy array
-        feature_vecs_np = self.create_mean_var_nparray(channels_input)
-
-        # Indices of inliers
-        outliers = self.get_outliers_IsolationForest(feature_vecs_np)
-
-        mean_vals, var_vals = self.get_mean_val_no_outliers(outliers, channels_input)
-
-        new_order = self.KMeans_2D(var_vals, mean_vals)
-
-        ret = self.create_shuff_for_total_batch(channels_input,
-                                                torch.from_numpy(new_order))
-
-        if global_vars.args.plot_groups:
-            channel_means = channels_input.mean(dim=(0, 2, 3))
-            channel_vars = channels_input.var(dim=(0, 2, 3))
-
-            self.plot_groups(new_order, channel_means, channel_vars)
-
-        return ret.to(channels_input.device)
+        return self. SortChannelsOutliersKMeans(channels_input, method='IsolationForest')
 
     def SortChannelsV15(self, channels_input):
+        return self. SortChannelsOutliersKMeans(channels_input, method='ZScore')
+
+    def SortChannelsOutliersKMeans(self, channels_input, method='IsolationForest'):
         # Convert to a numpy array
         feature_vecs_np = self.create_mean_var_nparray(channels_input)
 
-        # Calculate the centroid
-        centroid = np.mean(feature_vecs_np, axis=0)
+        # Indices of inliers/outliers
+        if method == 'IsolationForest':
+            outliers = self.get_outliers_IsolationForest(feature_vecs_np)
+        elif method == 'ZScore':
+            # Calculate the centroid
+            centroid = np.mean(feature_vecs_np, axis=0)
+            # Calculate the Euclidean distance from each point to the centroid
+            distances = np.linalg.norm(feature_vecs_np - centroid, axis=1)
+            # Calculate the z-score of the distances
+            z_scores = zscore(distances)
+            # Absolute Z-scores > 3 are considered as outliers
+            outliers = np.abs(z_scores) > 3
 
-        # Calculate the Euclidean distance from each point to the centroid
-        distances = np.linalg.norm(feature_vecs_np - centroid, axis=1)
+            outliers = np.where(outliers)[0]
+        else:
+            raise ValueError(
+                "Invalid method. Expected 'IsolationForest' or 'ZScore'")
 
-        # Calculate the z-score of the distances
-        z_scores = zscore(distances)
-
-        # Absolute Z-scores > 3 are considered as outliers
-        outliers = np.abs(z_scores) > 3
-
-        outlier_indices = np.where(outliers)[0]
-
-        mean_vals, var_vals = self.get_mean_val_no_outliers(outlier_indices, channels_input)
+        mean_vals, var_vals = self.get_mean_val_no_outliers(outliers,
+                                                            channels_input)
 
         new_order = self.KMeans_2D(var_vals, mean_vals)
 

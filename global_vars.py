@@ -301,6 +301,9 @@ def generate_wandb_name():
 
         wanda_test_name += f'_shuff-every-ep-{args.norm_shuffle}'
 
+        if args.max_norm_shuffle != max_norm_shuffle_DEAFULT:
+            wanda_test_name += f'_max-shuff-{args.max_norm_shuffle}'
+
     wanda_test_name += f'_bs-{args.batch_size}'
 
     if args.group_by_size:
@@ -310,9 +313,6 @@ def generate_wandb_name():
 
     if args.model_version == 2:
         wanda_test_name += f'_du-{args.dropout_prop}'
-
-    if args.max_norm_shuffle != max_norm_shuffle_DEAFULT:
-        wanda_test_name += f'_max-shuff-{args.max_norm_shuffle}'
 
     if args.load:
         wanda_test_name += f'_{os.path.splitext(os.path.basename(args.load))[0]}'
