@@ -1,11 +1,11 @@
 {
   "model_version": 1,
-  "SGN_version": 16,
+  "SGN_version": 14,
   "RGN_version": 1,
   "method": "SGN",
   "epochs": 100,
   "batch_size": 16,
-  "lr": 0.01,
+  "lr": 0.1,
   "group_norm": 16,
   "norm_shuffle": 20,
   "riar": 1,
