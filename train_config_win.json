@@ -1,6 +1,6 @@
 {
   "model_version": 1,
-  "SGN_version": 16,
+  "SGN_version": 14,
   "RGN_version": 2,
   "load": "init_weights\\W1.pt",
   "method": "SGN",
