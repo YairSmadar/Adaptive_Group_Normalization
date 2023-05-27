@@ -15,6 +15,168 @@ if global_vars.args.plot_groups:
     import matplotlib.pyplot as plt
 
 
+class SimilarityGroupNorm(Module):
+    def __init__(self, num_groups: int, num_channels: int = 32, eps=1e-12,
+                 strategy=None):
+        super(SimilarityGroupNorm, self).__init__()
+        self.groupNorm = GroupNorm(num_groups, num_channels, eps=eps,
+                                   affine=True)
+        self.indexes = None
+        self.reverse_indexes = None
+        self.groups_representation_num = None  # not used
+        self.eval_indexes = None
+        self.eval_reverse_indexes = None
+        self.layer_index = getLayerIndex()
+        self.num_groups = num_groups
+        self.num_channels = num_channels
+        self.group_size = int(num_channels / num_groups)
+        self.eps = eps
+        self.strategy = strategy
+
+    def forward(self, Conv_input):
+
+        # start shuffle at epoch > 0
+        if global_vars.args.epoch_start_cluster > global_vars.epoch_num:
+            return self.groupNorm(Conv_input)
+
+        N, C, H, W = Conv_input.size()
+
+        if global_vars.recluster:
+            self.recluster(Conv_input)
+
+        # in case using shuffle last batch
+        if self.indexes is None:
+            return self.groupNorm(Conv_input)
+
+        if global_vars.train_mode:
+            indexes = self.indexes
+            reverse_indexes = self.reverse_indexes
+        else:
+            indexes = self.eval_indexes
+            reverse_indexes = self.eval_reverse_indexes
+
+        Conv_input_reshaped = Conv_input.view(-1, W * H)
+
+        # Use torch.index_select for better performance
+        Conv_input_new_idx = torch.index_select(Conv_input_reshaped, 0,
+                                                indexes)
+        GN_input = Conv_input_new_idx.view(N, C, H, W)
+        Conv_input_new_idx_norm = self.groupNorm(GN_input)
+        Conv_input_new_idx_norm = Conv_input_new_idx_norm.view(-1, W * H)
+
+        # Use torch.index_select for better performance
+        Conv_input_orig_idx_norm = torch.index_select(Conv_input_new_idx_norm,
+                                                      0, reverse_indexes)
+
+        ret = Conv_input_orig_idx_norm.view(N, C, H, W).requires_grad_(
+            requires_grad=True)
+
+        return ret
+
+    def recluster(self, Conv_input):
+        self.indexes = self.SimilarityGroupNormClustering(clone(Conv_input)).to(
+            dtype=torch.int64)
+
+        self.reverse_indexes = torch.argsort(self.eval_indexes).to(
+            Conv_input.device)
+
+    def SimilarityGroupNormClustering(self, channels_input):
+        if self.strategy is not None:
+            channelsClustering = self.strategy.sort_channels(channels_input)
+        else:
+            print("No clustering strategy defined!")
+            exit(1)
+
+        self.get_channels_clustering_for_eval(channels_input,
+                                              channelsClustering)
+
+        return channelsClustering
+
+    def select_channels_indices_according_to_the_most(
+            self,
+            channels_input: torch.Tensor,
+            channelsClustering: torch.Tensor):
+
+        N, C, _, _ = channels_input.size()
+
+        channel_groups = {i: [] for i in range(C)}
+        for i in range(N * C):
+            channel_to = channelsClustering[i] % C
+            group_num = self.map_to_group(i)
+            channel_groups[channel_to.item()].append(group_num)
+
+        max_elements = self.get_num_occurrences(channel_groups)
+
+        final_channel_groups = {i: [] for i in range(self.num_groups)}
+
+        # Create a max heap (using negative values)
+        min_heap = [(-max_val, channel_num, group) for channel_num, max_vals in
+                    enumerate(max_elements.values()) for group, max_val in
+                    enumerate(max_vals)]
+
+        # Heapify the max heap
+        heapq.heapify(min_heap)
+        added_indices = set()
+        while True:
+            # Get the corresponding index and group of the maximum value
+            neg_max_value, channel_num, group = heapq.heappop(min_heap)
+
+            if len(final_channel_groups[
+                       group]) < self.group_size and channel_num not in added_indices:
+                final_channel_groups[group].append(channel_num)
+                added_indices.add(channel_num)
+
+            # Break the loop when all groups are filled
+            if all(len(lst) == self.group_size for lst in
+                   final_channel_groups.values()):
+                break
+
+        # Flatten the lists in the dictionary
+        flat_list = [elem for lst in final_channel_groups.values() for elem in
+                     lst]
+
+        # Convert the flattened list to a PyTorch tensor
+        factors = torch.arange(0, N) * C
+
+        eval_indexes = torch.tensor(flat_list)
+        eval_indexes = \
+            eval_indexes.repeat(N).reshape(N, C) + factors.unsqueeze(1)
+        eval_indexes = eval_indexes.reshape(-1).to(channels_input.device)
+
+        return eval_indexes
+
+    def get_channels_clustering_for_eval(self, channels_input: torch.Tensor,
+                                         channelsClustering: torch.Tensor):
+
+        # in case the channels are shuffle the same for every image
+        if global_vars.args.SGN_version >= 10:
+            self.eval_indexes = channelsClustering
+            self.eval_reverse_indexes = torch.argsort(self.eval_indexes).to(
+                channels_input.device)
+
+            return
+
+        self.eval_indexes = self.select_channels_indices_according_to_the_most(
+            channels_input, channelsClustering
+        )
+
+        self.eval_reverse_indexes = torch.argsort(self.eval_indexes).to(
+            channels_input.device)
+
+    def get_num_occurrences(self, d): # KEEP
+        num_counts = {i: [0] * self.num_groups for i in range(len(d))}
+
+        for i, lst in enumerate(d.values()):
+            for num in lst:
+                num_counts[i][num] += 1
+
+        return num_counts
+
+    def map_to_group(self, X: int): # KEEP
+        group_num = (X // self.group_size) % self.num_groups
+        return group_num
+
+
 class ClusteringStrategy(ABC):
     def __init__(self, num_groups: int, num_channels: int = 32):
         self.num_groups = num_groups
@@ -275,167 +437,6 @@ class ClusteringStrategy(ABC):
 
         return outliers
 
-
-class SimilarityGroupNorm(Module):
-    def __init__(self, num_groups: int, num_channels: int = 32, eps=1e-12,
-                 strategy=None):
-        super(SimilarityGroupNorm, self).__init__()
-        self.groupNorm = GroupNorm(num_groups, num_channels, eps=eps,
-                                   affine=True)
-        self.indexes = None
-        self.reverse_indexes = None
-        self.groups_representation_num = None  # not used
-        self.eval_indexes = None
-        self.eval_reverse_indexes = None
-        self.layer_index = getLayerIndex()
-        self.num_groups = num_groups
-        self.num_channels = num_channels
-        self.group_size = int(num_channels / num_groups)
-        self.eps = eps
-        self.strategy = strategy
-
-    def forward(self, Conv_input):
-
-        # start shuffle at epoch > 0
-        if global_vars.args.epoch_start_cluster > global_vars.epoch_num:
-            return self.groupNorm(Conv_input)
-
-        N, C, H, W = Conv_input.size()
-
-        if global_vars.recluster:
-            self.recluster(Conv_input)
-
-        # in case using shuffle last batch
-        if self.indexes is None:
-            return self.groupNorm(Conv_input)
-
-        if global_vars.train_mode:
-            indexes = self.indexes
-            reverse_indexes = self.reverse_indexes
-        else:
-            indexes = self.eval_indexes
-            reverse_indexes = self.eval_reverse_indexes
-
-        Conv_input_reshaped = Conv_input.view(-1, W * H)
-
-        # Use torch.index_select for better performance
-        Conv_input_new_idx = torch.index_select(Conv_input_reshaped, 0,
-                                                indexes)
-        GN_input = Conv_input_new_idx.view(N, C, H, W)
-        Conv_input_new_idx_norm = self.groupNorm(GN_input)
-        Conv_input_new_idx_norm = Conv_input_new_idx_norm.view(-1, W * H)
-
-        # Use torch.index_select for better performance
-        Conv_input_orig_idx_norm = torch.index_select(Conv_input_new_idx_norm,
-                                                      0, reverse_indexes)
-
-        ret = Conv_input_orig_idx_norm.view(N, C, H, W).requires_grad_(
-            requires_grad=True)
-
-        return ret
-
-    def recluster(self, Conv_input):
-        self.indexes = self.SimilarityGroupNormClustering(clone(Conv_input)).to(
-            dtype=torch.int64)
-
-        self.reverse_indexes = torch.argsort(self.eval_indexes).to(
-            Conv_input.device)
-
-    def SimilarityGroupNormClustering(self, channels_input):
-        if self.strategy is not None:
-            channelsClustering = self.strategy.sort_channels(channels_input)
-        else:
-            print("No clustering strategy defined!")
-            exit(1)
-
-        self.get_channels_clustering_for_eval(channels_input,
-                                              channelsClustering)
-
-        return channelsClustering
-
-    def select_channels_indices_according_to_the_most(
-            self,
-            channels_input: torch.Tensor,
-            channelsClustering: torch.Tensor):
-
-        N, C, _, _ = channels_input.size()
-
-        channel_groups = {i: [] for i in range(C)}
-        for i in range(N * C):
-            channel_to = channelsClustering[i] % C
-            group_num = self.map_to_group(i)
-            channel_groups[channel_to.item()].append(group_num)
-
-        max_elements = self.get_num_occurrences(channel_groups)
-
-        final_channel_groups = {i: [] for i in range(self.num_groups)}
-
-        # Create a max heap (using negative values)
-        min_heap = [(-max_val, channel_num, group) for channel_num, max_vals in
-                    enumerate(max_elements.values()) for group, max_val in
-                    enumerate(max_vals)]
-
-        # Heapify the max heap
-        heapq.heapify(min_heap)
-        added_indices = set()
-        while True:
-            # Get the corresponding index and group of the maximum value
-            neg_max_value, channel_num, group = heapq.heappop(min_heap)
-
-            if len(final_channel_groups[
-                       group]) < self.group_size and channel_num not in added_indices:
-                final_channel_groups[group].append(channel_num)
-                added_indices.add(channel_num)
-
-            # Break the loop when all groups are filled
-            if all(len(lst) == self.group_size for lst in
-                   final_channel_groups.values()):
-                break
-
-        # Flatten the lists in the dictionary
-        flat_list = [elem for lst in final_channel_groups.values() for elem in
-                     lst]
-
-        # Convert the flattened list to a PyTorch tensor
-        factors = torch.arange(0, N) * C
-
-        eval_indexes = torch.tensor(flat_list)
-        eval_indexes = \
-            eval_indexes.repeat(N).reshape(N, C) + factors.unsqueeze(1)
-        eval_indexes = eval_indexes.reshape(-1).to(channels_input.device)
-
-        return eval_indexes
-
-    def get_channels_clustering_for_eval(self, channels_input: torch.Tensor,
-                                         channelsClustering: torch.Tensor):
-
-        # in case the channels are shuffle the same for every image
-        if global_vars.args.SGN_version >= 10:
-            self.eval_indexes = channelsClustering
-            self.eval_reverse_indexes = torch.argsort(self.eval_indexes).to(
-                channels_input.device)
-
-            return
-
-        self.eval_indexes = self.select_channels_indices_according_to_the_most(
-            channels_input, channelsClustering
-        )
-
-        self.eval_reverse_indexes = torch.argsort(self.eval_indexes).to(
-            channels_input.device)
-
-    def get_num_occurrences(self, d): # KEEP
-        num_counts = {i: [0] * self.num_groups for i in range(len(d))}
-
-        for i, lst in enumerate(d.values()):
-            for num in lst:
-                num_counts[i][num] += 1
-
-        return num_counts
-
-    def map_to_group(self, X: int): # KEEP
-        group_num = (X // self.group_size) % self.num_groups
-        return group_num
 
 class SortChannelsV1(ClusteringStrategy):
     def sort_channels(self, channels_input):
