@@ -8,8 +8,10 @@ import heapq
 from scipy.cluster.hierarchy import linkage, leaves_list
 from k_means_constrained import KMeansConstrained
 from sklearn.ensemble import IsolationForest
+from sklearn.cluster import KMeans
 from scipy.stats import zscore
 from abc import ABC, abstractmethod
+from VariableGroupNorm import VariableGroupNorm
 
 if global_vars.args.plot_groups:
     import matplotlib.pyplot as plt
@@ -21,6 +23,7 @@ class SimilarityGroupNorm(Module):
         super(SimilarityGroupNorm, self).__init__()
         self.groupNorm = GroupNorm(num_groups, num_channels, eps=eps,
                                    affine=True)
+        self.variableGroupNorm = VariableGroupNorm(num_channels)
         self.indexes = None
         self.reverse_indexes = None
         self.groups_representation_num = None  # not used
@@ -32,12 +35,16 @@ class SimilarityGroupNorm(Module):
         self.group_size = int(num_channels / num_groups)
         self.eps = eps
         self.strategy = strategy
+        self.cluster_sizes = torch.FloatTensor([self.group_size]*num_groups)
 
     def forward(self, Conv_input):
-
+        SGN_version = global_vars.args.SGN_version
         # start shuffle at epoch > 0
         if global_vars.args.epoch_start_cluster > global_vars.epoch_num:
-            return self.groupNorm(Conv_input)
+            if SGN_version == 17:
+                return self.variableGroupNorm(Conv_input, self.cluster_sizes)
+            else:
+                return self.groupNorm(Conv_input)
 
         N, C, H, W = Conv_input.size()
 
@@ -46,7 +53,10 @@ class SimilarityGroupNorm(Module):
 
         # in case using shuffle last batch
         if self.indexes is None:
-            return self.groupNorm(Conv_input)
+            if SGN_version == 17:
+                return self.variableGroupNorm(Conv_input, self.cluster_sizes)
+            else:
+                return self.groupNorm(Conv_input)
 
         if global_vars.train_mode:
             indexes = self.indexes
@@ -61,7 +71,12 @@ class SimilarityGroupNorm(Module):
         Conv_input_new_idx = torch.index_select(Conv_input_reshaped, 0,
                                                 indexes)
         GN_input = Conv_input_new_idx.view(N, C, H, W)
-        Conv_input_new_idx_norm = self.groupNorm(GN_input)
+
+        if SGN_version == 17:
+            Conv_input_new_idx_norm = self.variableGroupNorm(Conv_input, self.cluster_sizes)
+        else:
+            Conv_input_new_idx_norm = self.groupNorm(Conv_input)
+
         Conv_input_new_idx_norm = Conv_input_new_idx_norm.view(-1, W * H)
 
         # Use torch.index_select for better performance
@@ -82,7 +97,10 @@ class SimilarityGroupNorm(Module):
 
     def SimilarityGroupNormClustering(self, channels_input):
         if self.strategy is not None:
-            channelsClustering = self.strategy.sort_channels(channels_input)
+            if global_vars.args.SGN_version == 17:
+                channelsClustering, self.cluster_sizes = self.strategy.sort_channels(channels_input)
+            else:
+                channelsClustering = self.strategy.sort_channels(channels_input)
         else:
             print("No clustering strategy defined!")
             exit(1)
@@ -307,7 +325,7 @@ class ClusteringStrategy(ABC):
 
         return channelsClustering
 
-    def KMeans_2D(self, channel_vars, channel_means):
+    def KMeansConstrained_2D(self, channel_vars, channel_means):
 
         # Create a 2D tensor where each row is a channel
         # and the columns are the mean and variance
@@ -329,7 +347,29 @@ class ClusteringStrategy(ABC):
 
         return new_order
 
-    def SortChannelsOutliersKMeans(self, channels_input, method='IsolationForest'):
+    def KMeans_2D(self, channel_vars, channel_means):
+
+        # Create a 2D tensor where each row is a channel
+        # and the columns are the mean and variance
+        channel_stats = torch.stack((channel_means, channel_vars), dim=1)
+
+        # Perform constrained k-means clustering on the channel statistics
+        kmeans = KMeans(n_clusters=self.num_groups, random_state=global_vars.args.seed).fit(
+            channel_stats.cpu().detach().numpy())
+
+        # The labels_ attribute of the fitted model
+        # gives the group for each channel
+        groups = kmeans.labels_
+
+        # Get the indices that would sort the groups
+        new_order = np.argsort(groups)
+
+        # Get the sizes of each group
+        cluster_sizes = np.bincount(groups)
+
+        return new_order, torch.from_numpy(cluster_sizes)
+
+    def SortChannelsOutliersKMeansConstrained(self, channels_input, method='IsolationForest'):
         # Convert to a numpy array
         feature_vecs_np = self.create_mean_var_nparray(channels_input)
 
@@ -362,7 +402,7 @@ class ClusteringStrategy(ABC):
         mean_vals, var_vals = self.get_mean_val_no_outliers(outliers,
                                                             channels_input)
 
-        new_order = self.KMeans_2D(var_vals, mean_vals)
+        new_order = self.KMeansConstrained_2D(var_vals, mean_vals)
 
         ret = self.create_shuff_for_total_batch(channels_input,
                                                 torch.from_numpy(new_order))
@@ -716,7 +756,7 @@ class SortChannelsV13(ClusteringStrategy):
         channel_vars = torch.var(channels_input, dim=(0, 2, 3))
 
         # Get the indices that would sort the groups
-        new_order = self.KMeans_2D(channel_vars, channel_means)
+        new_order = self.KMeansConstrained_2D(channel_vars, channel_means)
 
         ret = self.create_shuff_for_total_batch(channels_input,
                                                 torch.from_numpy(new_order))
@@ -732,14 +772,35 @@ class SortChannelsV13(ClusteringStrategy):
 
 class SortChannelsV14(ClusteringStrategy):
     def sort_channels(self, channels_input):
-        return self.SortChannelsOutliersKMeans(channels_input, method='IsolationForest')
+        return self.SortChannelsOutliersKMeansConstrained(channels_input, method='IsolationForest')
 
 
 class SortChannelsV15(ClusteringStrategy):
     def sort_channels(self, channels_input):
-        return self.SortChannelsOutliersKMeans(channels_input, method='ZScoreV1')
+        return self.SortChannelsOutliersKMeansConstrained(channels_input, method='ZScoreV1')
 
 
 class SortChannelsV16(ClusteringStrategy):
     def sort_channels(self, channels_input):
-        return self.SortChannelsOutliersKMeans(channels_input, method='ZScoreV2')
+        return self.SortChannelsOutliersKMeansConstrained(channels_input, method='ZScoreV2')
+
+
+class SortChannelsV17(ClusteringStrategy):
+    def sort_channels(self, channels_input):
+        # Calculate the mean and variance for each channel
+        channel_means = torch.mean(channels_input, dim=(0, 2, 3))
+        channel_vars = torch.var(channels_input, dim=(0, 2, 3))
+
+        # Get the indices that would sort the groups
+        new_order, cluster_sizes = self.KMeans_2D(channel_vars, channel_means)
+
+        ret = self.create_shuff_for_total_batch(channels_input,
+                                                torch.from_numpy(new_order))
+
+        if global_vars.args.plot_groups:
+            channel_means = channels_input.mean(dim=(0, 2, 3))
+            channel_vars = channels_input.var(dim=(0, 2, 3))
+
+            self.plot_groups(new_order, channel_means, channel_vars)
+
+        return ret.to(channels_input.device), cluster_sizes
