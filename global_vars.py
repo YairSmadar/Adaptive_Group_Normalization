@@ -115,6 +115,8 @@ parser.add_argument('--cluster_last_batch', default=False, action="store_true",
                          'last epoch. default=cluster in the first epoch')
 parser.add_argument('--dropout_prop', default=0.2, type=float,
                     help='dropout probability')
+parser.add_argument('--stop_scheduler_step_at', default=50, type=int,
+                    help='stop scheduler step at epoch number X')
 
 
 

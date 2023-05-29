@@ -4,8 +4,8 @@
   "RGN_version": 1,
   "method": "SGN",
   "epochs": 100,
-  "batch_size": 16,
-  "lr": 0.1,
+  "batch_size": 8,
+  "lr": 0.01,
   "group_norm": 16,
   "norm_shuffle": 20,
   "riar": 1,
@@ -21,6 +21,7 @@
   "cluster_last_batch": false,
   "dropout_prop": 0.3,
   "max_norm_shuffle": 50,
+  "stop_scheduler_step_at": 50,
   "classes_to_train":
   [
     "all"
