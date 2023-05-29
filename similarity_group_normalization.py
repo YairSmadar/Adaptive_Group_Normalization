@@ -73,9 +73,9 @@ class SimilarityGroupNorm(Module):
         GN_input = Conv_input_new_idx.view(N, C, H, W)
 
         if SGN_version == 17:
-            Conv_input_new_idx_norm = self.variableGroupNorm(Conv_input, self.cluster_sizes)
+            Conv_input_new_idx_norm = self.variableGroupNorm(GN_input, self.cluster_sizes)
         else:
-            Conv_input_new_idx_norm = self.groupNorm(Conv_input)
+            Conv_input_new_idx_norm = self.groupNorm(GN_input)
 
         Conv_input_new_idx_norm = Conv_input_new_idx_norm.view(-1, W * H)
 
