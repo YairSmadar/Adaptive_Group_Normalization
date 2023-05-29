@@ -90,5 +90,5 @@ def setSchedulers(optimizer):
 
 def schedulersStep(epoch):
     for scheduler, cond in zip(schedulers, conds):
-        if (cond(epoch)):
+        if (cond(epoch) and epoch < 50):
             scheduler.step()
