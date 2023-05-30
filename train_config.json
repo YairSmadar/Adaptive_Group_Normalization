@@ -22,6 +22,7 @@
   "dropout_prop": 0.3,
   "max_norm_shuffle": 50,
   "stop_scheduler_step_at": 50,
+  "scheduler_name": "multisteplr",
   "classes_to_train":
   [
     "all"

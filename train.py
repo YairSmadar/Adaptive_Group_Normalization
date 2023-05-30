@@ -7,7 +7,7 @@ from os.path import isfile
 from time import time
 from numpy.random import seed as seed1
 from resnet import resnet50
-from scedulers import setSchedulers, schedulersStep
+from scedulers import SchedulerManager
 from data_loading import getLoaders
 
 from torch import use_deterministic_algorithms, load, no_grad
@@ -83,7 +83,8 @@ def main():
     global_vars.init_saveing_path()
 
     # set schedulers
-    setSchedulers(optimizer)
+    scheduler_manager = SchedulerManager(args.scheduler_name)
+    scheduler_manager.set_schedulers(optimizer)
 
     # get the learning rate to the starting value
     for epoch in range(0, args.start_epoch):
@@ -92,7 +93,7 @@ def main():
         optimizer.step()
 
         # adjust the learning rate
-        schedulersStep(epoch)
+        scheduler_manager.schedulers_step(epoch)
 
     for epoch in range(args.epochs):
 
@@ -127,7 +128,7 @@ def main():
             global_vars.save_results(train_loss, train_prc1, train_prc5, test_loss, test_prc1, test_prc5)
 
             # adjust the learning rate
-            schedulersStep(epoch)
+            scheduler_manager.schedulers_step(epoch)
 
             # save checkpoint
             global_vars.save_checkpoint(model, optimizer, epoch)
