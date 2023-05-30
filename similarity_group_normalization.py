@@ -1,3 +1,5 @@
+import math
+
 import numpy as np
 import torch
 from torch import clone, tensor, sort, zeros_like, cat, ceil, floor
@@ -17,7 +19,7 @@ if global_vars.args.plot_groups:
 
 class SimilarityGroupNorm(Module):
     def __init__(self, num_groups: int, num_channels: int = 32, eps=1e-12,
-                 strategy=None):
+                 strategy=None, no_shuff_best_k_p: float = -1.0):
         super(SimilarityGroupNorm, self).__init__()
         self.groupNorm = GroupNorm(num_groups, num_channels, eps=eps,
                                    affine=True)
@@ -32,6 +34,7 @@ class SimilarityGroupNorm(Module):
         self.group_size = int(num_channels / num_groups)
         self.eps = eps
         self.strategy = strategy
+
 
     def forward(self, Conv_input):
 
@@ -82,6 +85,11 @@ class SimilarityGroupNorm(Module):
 
     def SimilarityGroupNormClustering(self, channels_input):
         if self.strategy is not None:
+            if self.no_shuff_best_k_p != -1:
+                best_std_groups = self.find_best_std_groups(channels_input)
+                # filterd_channels_input = channels_input[:,X,:,:]
+            else:
+                best_std_groups = None
             channelsClustering = self.strategy.sort_channels(channels_input)
         else:
             print("No clustering strategy defined!")
@@ -92,63 +100,23 @@ class SimilarityGroupNorm(Module):
 
         return channelsClustering
 
-    def select_channels_indices_according_to_the_most(
-            self,
-            channels_input: torch.Tensor,
-            channelsClustering: torch.Tensor):
+    def find_best_std_groups(self, channels_input):
+        with torch.no_grad():
+            N, C, H, W = channels_input.size()
+            channels_input_groups = channels_input.view(N, self.num_groups,
+                                                        C // self.num_groups,
+                                                        H, W)
 
-        N, C, _, _ = channels_input.size()
-
-        channel_groups = {i: [] for i in range(C)}
-        for i in range(N * C):
-            channel_to = channelsClustering[i] % C
-            group_num = self.map_to_group(i)
-            channel_groups[channel_to.item()].append(group_num)
-
-        max_elements = self.get_num_occurrences(channel_groups)
-
-        final_channel_groups = {i: [] for i in range(self.num_groups)}
-
-        # Create a max heap (using negative values)
-        min_heap = [(-max_val, channel_num, group) for channel_num, max_vals in
-                    enumerate(max_elements.values()) for group, max_val in
-                    enumerate(max_vals)]
-
-        # Heapify the max heap
-        heapq.heapify(min_heap)
-        added_indices = set()
-        while True:
-            # Get the corresponding index and group of the maximum value
-            neg_max_value, channel_num, group = heapq.heappop(min_heap)
-
-            if len(final_channel_groups[
-                       group]) < self.group_size and channel_num not in added_indices:
-                final_channel_groups[group].append(channel_num)
-                added_indices.add(channel_num)
-
-            # Break the loop when all groups are filled
-            if all(len(lst) == self.group_size for lst in
-                   final_channel_groups.values()):
-                break
-
-        # Flatten the lists in the dictionary
-        flat_list = [elem for lst in final_channel_groups.values() for elem in
-                     lst]
-
-        # Convert the flattened list to a PyTorch tensor
-        factors = torch.arange(0, N) * C
-
-        eval_indexes = torch.tensor(flat_list)
-        eval_indexes = \
-            eval_indexes.repeat(N).reshape(N, C) + factors.unsqueeze(1)
-        eval_indexes = eval_indexes.reshape(-1).to(channels_input.device)
-
-        return eval_indexes
+            stds = torch.std(channels_input_groups, dim=(0, 2, 3, 4))
+            no_shuff_best_k = math.ceil(self.num_groups * self.no_shuff_best_k_p)
+            values, indices = torch.topk(stds, no_shuff_best_k)
+            return indices.sort().values
 
     def get_channels_clustering_for_eval(self, channels_input: torch.Tensor,
                                          channelsClustering: torch.Tensor):
 
-        # in case the channels are shuffle the same for every image
+        # in case the channels are shuffle the same for every image,
+        # We used this from version 10 and above
         if global_vars.args.SGN_version >= 10:
             self.eval_indexes = channelsClustering
             self.eval_reverse_indexes = torch.argsort(self.eval_indexes).to(
@@ -156,25 +124,12 @@ class SimilarityGroupNorm(Module):
 
             return
 
-        self.eval_indexes = self.select_channels_indices_according_to_the_most(
-            channels_input, channelsClustering
-        )
+        self.eval_indexes = \
+            self.strategy.select_channels_indices_according_to_the_most(
+                channels_input, channelsClustering)
 
         self.eval_reverse_indexes = torch.argsort(self.eval_indexes).to(
             channels_input.device)
-
-    def get_num_occurrences(self, d): # KEEP
-        num_counts = {i: [0] * self.num_groups for i in range(len(d))}
-
-        for i, lst in enumerate(d.values()):
-            for num in lst:
-                num_counts[i][num] += 1
-
-        return num_counts
-
-    def map_to_group(self, X: int): # KEEP
-        group_num = (X // self.group_size) % self.num_groups
-        return group_num
 
 
 class ClusteringStrategy(ABC):
