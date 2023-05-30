@@ -1,94 +1,104 @@
-from torch.optim.lr_scheduler import MultiStepLR, LinearLR
-from numpy import arange
-
-import global_vars
-
-schedulers = []
-conds = []
+from torch.optim.lr_scheduler import MultiStepLR, LinearLR, CyclicLR
+from abc import ABC, abstractmethod
+from global_vars import args
 
 
-def getDefaultScheduler(optimizer):
-    return MultiStepLR(optimizer=optimizer, milestones=arange(30, 100), gamma=0.1 ** (1 / 70))
+class BaseScheduler(ABC):
+    @abstractmethod
+    def get_scheduler(self, optimizer):
+        pass
+
+    @abstractmethod
+    def condition(self, epoch):
+        pass
 
 
-def getDefaultSchedulerShifted2(optimizer):
-    return MultiStepLR(optimizer=optimizer, milestones=arange(30, 150), gamma=0.3 ** (1 / 120))
+class DefaultWarmUpScheduler(BaseScheduler):
+    NAME = "defaultwarmup"
+
+    def get_scheduler(self, optimizer):
+        return LinearLR(optimizer=optimizer, start_factor=0.001, end_factor=1.0,
+                        total_iters=10, last_epoch=-1)
+
+    def condition(self, epoch):
+        return epoch < 10
 
 
-def getDefaultSchedulerShifted(optimizer):
-    return MultiStepLR(optimizer=optimizer, milestones=arange(80, 170), gamma=0.1 ** (1 / 70))
+class DefaultScheduler(BaseScheduler):
+    NAME = "deafultmultistep"
+
+    def get_scheduler(self, optimizer):
+        return MultiStepLR(optimizer=optimizer, milestones=range(30, 100),
+                           gamma=0.1 ** (1 / 70))
+
+    def condition(self, epoch):
+        return True
 
 
-def getLongerDecayScheduler(optimizer):
-    return LinearLR(optimizer=optimizer, start_factor=1.0, end_factor=0.3, total_iters=120, last_epoch=-1)
+class MultiStepLRScheduler(BaseScheduler):
+    NAME = "multisteplr"
+
+    def get_scheduler(self, optimizer):
+        return MultiStepLR(optimizer=optimizer, milestones=[10, 30, 70],
+                           gamma=0.5)
+
+    def condition(self, epoch):
+        return True
 
 
-def getDefaultWarmUpScheduler(optimizer):
-    return LinearLR(optimizer=optimizer, start_factor=0.001, end_factor=1.0, total_iters=10, last_epoch=-1)
+class Triangular2Scheduler(BaseScheduler):
+    NAME = "triangular2"
+
+    def get_scheduler(self, optimizer):
+        return CyclicLR(optimizer, base_lr=args.lr*0.1, max_lr=args.lr,
+                        step_size_up=5, step_size_down=10, mode='triangular2')
+
+    def condition(self, epoch):
+        return True  # Always apply this scheduler.
 
 
-def getLongerWarmUpScheduler(optimizer):
-    return LinearLR(optimizer=optimizer, start_factor=0.001, end_factor=1.0, total_iters=50, last_epoch=-1)
+class SchedulerFactory:
+    def __init__(self):
+        self.scheduler_classes = {
+            DefaultWarmUpScheduler.NAME: DefaultWarmUpScheduler,
+            DefaultScheduler.NAME: DefaultScheduler,
+            MultiStepLRScheduler.NAME: MultiStepLRScheduler,
+            Triangular2Scheduler.NAME: Triangular2Scheduler
+        }
+
+    def get_scheduler(self, scheduler_name):
+        scheduler_class = self.scheduler_classes.get(scheduler_name)
+        if scheduler_class is None:
+            raise KeyError(f'There is no scheduler name {scheduler_name}')
+        return scheduler_class()
 
 
-def setSchedulers(optimizer):
-    if global_vars.args.scheduler_name == "default":
-        schedulers.append(getDefaultWarmUpScheduler(optimizer))
+class SchedulerManager:
+    def __init__(self, scheduler_name):
+        self.schedulers = []
+        self.factory = SchedulerFactory()
+        self.scheduler_name = scheduler_name
 
-        def cond(epoch):
-            return epoch < 10
+    def add_scheduler(self, scheduler_name, optimizer):
+        scheduler = self.factory.get_scheduler(scheduler_name)
+        scheduler_instance = scheduler.get_scheduler(optimizer)
+        self.schedulers.append((scheduler_instance, scheduler.condition))
 
-        conds.append(cond)
-        schedulers.append(getDefaultScheduler(optimizer))
+    def set_schedulers(self, optimizer):
+        if self.scheduler_name == 'default':
+            self.add_scheduler(DefaultWarmUpScheduler.NAME, optimizer)
+            self.add_scheduler(DefaultScheduler.NAME, optimizer)
+        elif self.scheduler_name == 'multisteplr':
+            self.add_scheduler(MultiStepLRScheduler.NAME, optimizer)
+        elif self.scheduler_name == 'triangular2':
+            self.add_scheduler(Triangular2Scheduler.NAME, optimizer)
+        else:
+            raise KeyError(f'There is no scheduler name {self.scheduler_name}')
 
-        def cond2(epoch):
-            return True
+    def get_scheduler_name(self):
+        return self.scheduler_name
 
-        conds.append(cond2)
-    elif global_vars.args.scheduler_name == "defaultwithlongerdecay":
-        schedulers.append(getDefaultWarmUpScheduler(optimizer))
-
-        def cond(epoch):
-            return epoch < 10
-
-        conds.append(cond)
-        schedulers.append(getLongerDecayScheduler(optimizer))
-
-        def cond2(epoch):
-            return epoch >= 30 and epoch < 150
-
-        conds.append(cond2)
-    elif global_vars.args.scheduler_name == "defaultwithlongerdecay2":
-        schedulers.append(getDefaultWarmUpScheduler(optimizer))
-
-        def cond(epoch):
-            return epoch < 10
-
-        conds.append(cond)
-        schedulers.append(getDefaultSchedulerShifted2(optimizer))
-
-        def cond2(epoch):
-            return True
-
-        conds.append(cond2)
-    elif global_vars.args.scheduler_name == "defaultwithlongerwarmup":
-        schedulers.append(getLongerWarmUpScheduler(optimizer))
-
-        def cond(epoch):
-            return epoch < 50
-
-        conds.append(cond)
-        schedulers.append(getDefaultSchedulerShifted(optimizer))
-
-        def cond2(epoch):
-            return True
-
-        conds.append(cond2)
-    else:
-        raise Exception("Scheduler not implemented.")
-
-
-def schedulersStep(epoch):
-    for scheduler, cond in zip(schedulers, conds):
-        if (cond(epoch)):
-            scheduler.step()
+    def schedulers_step(self, epoch):
+        for scheduler, cond in self.schedulers:
+            if cond(epoch):
+                scheduler.step()

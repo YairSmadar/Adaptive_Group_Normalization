@@ -5,7 +5,7 @@
   "load": "init_weights\\W1.pt",
   "method": "SGN",
   "epochs": 100,
-  "batch_size": 16,
+  "batch_size": 8,
   "lr": 0.01,
   "group_norm": 16,
   "norm_shuffle": 10,
@@ -18,12 +18,13 @@
   "use_wandb": false,
   "group_norm_size": 16,
   "plot_std": false,
-  "plot_groups": true,
+  "plot_groups": false,
   "epoch_start_cluster": 0,
   "cluster_last_batch": false,
   "dropout_prop": 0.3,
   "max_norm_shuffle": 70,
   "no_shuff_best_k_p": 0.2,
+  "scheduler_name": "multisteplr",
   "classes_to_train":
   [
     "apple",
