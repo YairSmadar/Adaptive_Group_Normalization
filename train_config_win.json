@@ -23,8 +23,8 @@
   "cluster_last_batch": false,
   "dropout_prop": 0.3,
   "max_norm_shuffle": 70,
-  "stop_scheduler_step_at": 50,
-  "scheduler_name": "multisteplr",
+  "no_shuff_best_k_p": 0.2,
+  "scheduler_name": "extramultisteplr",
   "classes_to_train":
   [
     "apple",

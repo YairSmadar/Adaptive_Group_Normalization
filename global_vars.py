@@ -71,7 +71,8 @@ parser.add_argument('--scheduler_name', default="default", type=str,
                          'chooses:\n'
                          '1. default\n'
                          '2. multisteplr\n'
-                         '3. triangular2')
+                         '3. triangular2\n'
+                         '4. extramultisteplr')
 parser.add_argument('--stop_scheduler_step_at', default=50, type=int,
                     help='stop scheduler step at epoch number X')
 parser.add_argument('--seed', default=0, type=int,

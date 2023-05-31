@@ -39,8 +39,19 @@ class MultiStepLRScheduler(BaseScheduler):
     NAME = "multisteplr"
 
     def get_scheduler(self, optimizer):
-        return MultiStepLR(optimizer=optimizer, milestones=[10, 30, 70],
+        return MultiStepLR(optimizer=optimizer, milestones=[30,70,90],
                            gamma=0.5)
+
+    def condition(self, epoch):
+        return True
+
+
+class ExtraMultiStepLRScheduler(BaseScheduler):
+    NAME = "extramultisteplr"
+
+    def get_scheduler(self, optimizer):
+        return MultiStepLR(optimizer=optimizer, milestones=range(10,90,5),
+                           gamma=0.95)
 
     def condition(self, epoch):
         return True
@@ -63,6 +74,7 @@ class SchedulerFactory:
             DefaultWarmUpScheduler.NAME: DefaultWarmUpScheduler,
             DefaultScheduler.NAME: DefaultScheduler,
             MultiStepLRScheduler.NAME: MultiStepLRScheduler,
+            ExtraMultiStepLRScheduler.NAME: ExtraMultiStepLRScheduler,
             Triangular2Scheduler.NAME: Triangular2Scheduler
         }
 
@@ -92,6 +104,8 @@ class SchedulerManager:
             self.add_scheduler(MultiStepLRScheduler.NAME, optimizer)
         elif self.scheduler_name == 'triangular2':
             self.add_scheduler(Triangular2Scheduler.NAME, optimizer)
+        elif self.scheduler_name == 'extramultisteplr':
+            self.add_scheduler(ExtraMultiStepLRScheduler.NAME, optimizer)
         else:
             raise KeyError(f'There is no scheduler name {self.scheduler_name}')
 
