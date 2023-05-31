@@ -119,7 +119,7 @@ parser.add_argument('--cluster_last_batch', default=False, action="store_true",
                          'last epoch. default=cluster in the first epoch')
 parser.add_argument('--dropout_prop', default=0.2, type=float,
                     help='dropout probability')
-parser.add_argument('--no_shuff_best_k_p', default=-1.0, type=float,
+parser.add_argument('--no_shuff_best_k_p', default=1.0, type=float,
                     help="Don't recluster best %K Classes (std) in percentages")
 
 
