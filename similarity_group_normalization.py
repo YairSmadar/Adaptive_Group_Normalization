@@ -122,7 +122,7 @@ class SimilarityGroupNorm(Module):
         if self.keep_best_std_groups:
 
             if self.indexes is None:
-                self.indexes = torch.arange(0, self.num_groups * self.group_size * N)
+                self.indexes = torch.arange(0, self.num_groups * self.group_size * N).to(channels_input.device)
 
             # Creating a mask to select the channels to be re-clustered
             mask = torch.ones(self.num_groups*N, dtype=torch.bool).to(channels_input.device)
@@ -141,7 +141,7 @@ class SimilarityGroupNorm(Module):
             # Depending on how many unchanged groups were in front of its original group
             original_group_of_channel = channels_to_cluster // self.group_size
             num_unclustered_before = (original_group_of_channel.unsqueeze(-1) > N_best_groups.unsqueeze(0)).sum(dim=1)
-            shifts = num_unclustered_before * self.group_size
+            shifts = (num_unclustered_before * self.group_size).to(channels_input.device)
             new_indexes[mask] = channelsClustering + shifts
 
             # Placing the non-reclustered groups back in their original positions with original values
