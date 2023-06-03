@@ -101,7 +101,7 @@ class SimilarityGroupNorm(Module):
                 self.strategy.filtered_num_groups = self.filtered_num_groups
 
                 best_group_size = best_std_groups.size()[0]
-                N_best_groups = torch.empty((best_group_size * N), dtype=torch.long)
+                N_best_groups = torch.empty((best_group_size * N), dtype=torch.long).to(channels_input.device)
 
                 for i in range(N):
                     s = best_group_size*i
@@ -125,7 +125,7 @@ class SimilarityGroupNorm(Module):
                 self.indexes = torch.arange(0, self.num_groups * self.group_size * N)
 
             # Creating a mask to select the channels to be re-clustered
-            mask = torch.ones(self.num_groups*N, dtype=torch.bool)
+            mask = torch.ones(self.num_groups*N, dtype=torch.bool).to(channels_input.device)
             mask[N_best_groups] = 0
 
             # Reshaping mask to align with channel indices and repeating it according to group size
@@ -135,7 +135,7 @@ class SimilarityGroupNorm(Module):
             channels_to_cluster = self.indexes[mask]
 
             # Creating a tensor for the new order of channels
-            new_indexes = torch.empty_like(self.indexes)
+            new_indexes = torch.empty_like(self.indexes).to(channels_input.devide)
 
             # Instead of shifting all channels, now we determine the shift individually for each channel
             # Depending on how many unchanged groups were in front of its original group
