@@ -126,6 +126,13 @@ class SimilarityGroupNorm(Module):
 
             # Creating a mask to select the channels to be re-clustered
             mask = torch.ones(self.num_groups*N, dtype=torch.bool).to(channels_input.device)
+
+            print(f"Shape of mask: {mask.shape}")
+            print(f"Shape of N_best_groups: {N_best_groups.shape}")
+            assert N_best_groups.max() < mask.numel(), f"Max index in N_best_groups ({N_best_groups.max().item()}) exceeds size of mask ({mask.numel()})"
+            assert N_best_groups.min() >= 0, f"Min index in N_best_groups ({N_best_groups.min().item()}) is less than 0"
+
+
             mask[N_best_groups] = 0
 
             # Reshaping mask to align with channel indices and repeating it according to group size
