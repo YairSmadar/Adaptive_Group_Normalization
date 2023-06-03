@@ -43,7 +43,6 @@ class SimilarityGroupNorm(Module):
         self.strategy = strategy
         self.no_shuff_best_k_p = no_shuff_best_k_p
 
-
     def forward(self, Conv_input):
 
         # start shuffle at epoch > 0
@@ -88,60 +87,67 @@ class SimilarityGroupNorm(Module):
         self.indexes = self.SimilarityGroupNormClustering(clone(Conv_input)).to(
             dtype=torch.int64)
 
-        self.reverse_indexes = torch.argsort(self.eval_indexes).to(
+        self.reverse_indexes = torch.argsort(self.indexes).to(
             Conv_input.device)
 
     def SimilarityGroupNormClustering(self, channels_input):
+
+        N, C, _, _ = channels_input.size()
         if self.strategy is not None:
             if self.keep_best_std_groups:
                 best_std_groups = self.find_best_std_groups(channels_input)
-                filtered_channels_input, included_channels = \
-                    self.exclude_std_groups(channels_input, best_std_groups)
+                filtered_channels_input, included_channels = self.exclude_std_groups(channels_input, best_std_groups)
+
                 self.strategy.filtered_num_groups = self.filtered_num_groups
+
+                best_group_size = best_std_groups.size()[0]
+                N_best_groups = torch.empty((best_group_size * N), dtype=torch.long)
+
+                for i in range(N):
+                    s = best_group_size*i
+                    e = s + best_group_size
+                    N_best_groups[s:e] = best_std_groups + (self.num_groups * i)
 
             else:
                 filtered_channels_input = channels_input
+
             channelsClustering = self.strategy.sort_channels(filtered_channels_input)
+
         else:
             print("No clustering strategy defined!")
             exit(1)
 
-        self.get_channels_clustering_for_eval(filtered_channels_input,
-                                              channelsClustering)
+        self.get_channels_clustering_for_eval(filtered_channels_input, channelsClustering)
 
         if self.keep_best_std_groups:
-            N, C, _, _ = channels_input.size()
-            t_channelsClustering = torch.zeros((N*C)).to(channels_input.device)
-            skipped_groups = 0
 
-            g_starts = []
-            g_ends = []
-            for g in best_std_groups:
-                g_start = g * self.group_size
-                g_end = g_start + self.group_size
-                for b in range(N):
-                    g_starts.append(g_start + C*b)
-                    g_ends.append(g_end + C*b)
+            if self.indexes is None:
+                self.indexes = torch.arange(0, self.num_groups * self.group_size * N)
 
-            for i, (s, e) in enumerate(zip(g_starts, g_ends)):
-                channelsClustering[(channelsClustering >= s) & (channelsClustering < e)] += i * self.group_size
+            # Creating a mask to select the channels to be re-clustered
+            mask = torch.ones(self.num_groups*N, dtype=torch.bool)
+            mask[N_best_groups] = 0
 
-            for group_id in range(self.num_groups*N):
+            # Reshaping mask to align with channel indices and repeating it according to group size
+            mask = mask.unsqueeze(-1).repeat(1, self.group_size).view(-1)
 
-                group_start = group_id * self.group_size
-                group_end = group_start + self.group_size
+            # Get the channels to be re-clustered
+            channels_to_cluster = self.indexes[mask]
 
-                if group_id % self.num_groups not in best_std_groups:
-                    group_id_channels = channelsClustering[group_start - skipped_groups*self.group_size
-                                           :group_end - skipped_groups*self.group_size]
-                    t_channelsClustering[group_start:group_end] = group_id_channels
-                else:
-                    if self.indexes is None:
-                        t_channelsClustering[group_start:group_end] = torch.Tensor(range(group_start, group_end)).to(channels_input.device)
-                    else:
-                        t_channelsClustering[group_start:group_end] = self.indexes[group_start:group_end]
-                    skipped_groups += 1
-                    channelsClustering += self.group_size
+            # Creating a tensor for the new order of channels
+            new_indexes = torch.empty_like(self.indexes)
+
+            # Instead of shifting all channels, now we determine the shift individually for each channel
+            # Depending on how many unchanged groups were in front of its original group
+            original_group_of_channel = channels_to_cluster // self.group_size
+            num_unclustered_before = (original_group_of_channel.unsqueeze(-1) > N_best_groups.unsqueeze(0)).sum(dim=1)
+            shifts = num_unclustered_before * self.group_size
+            new_indexes[mask] = channelsClustering + shifts
+
+            # Placing the non-reclustered groups back in their original positions with original values
+            new_indexes[~mask] = self.indexes[~mask]
+
+            channelsClustering = new_indexes
 
         return channelsClustering
 
