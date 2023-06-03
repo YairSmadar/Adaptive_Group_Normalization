@@ -310,6 +310,9 @@ def generate_wandb_name():
         if args.max_norm_shuffle != max_norm_shuffle_DEAFULT:
             wanda_test_name += f'_max-shuff-{args.max_norm_shuffle}'
 
+        if args.no_shuff_best_k_p != 1.0:
+            wanda_test_name += f'_ns-{args.no_shuff_best_k_p}'
+
     wanda_test_name += f'_bs-{args.batch_size}'
 
     if args.group_by_size:
