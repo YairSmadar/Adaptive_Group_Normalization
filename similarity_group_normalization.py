@@ -141,7 +141,8 @@ class SimilarityGroupNorm(Module):
 
             # Instead of shifting all channels, now we determine the shift individually for each channel
             # Depending on how many unchanged groups were in front of its original group
-            original_group_of_channel = channels_to_cluster // self.group_size
+            original_group_of_channel = torch.div(channels_to_cluster, self.group_size, rounding_mode='floor')
+
             num_unclustered_before = (original_group_of_channel.unsqueeze(-1) > N_best_groups.unsqueeze(0)).sum(dim=1)
             shifts = (num_unclustered_before * self.group_size).to(channels_input.device)
             new_indexes[mask] = channelsClustering + shifts
@@ -172,7 +173,9 @@ class SimilarityGroupNorm(Module):
         with torch.no_grad():
             N, C, H, W = channels_input.size()
             channels_input_groups = channels_input.view(N, self.num_groups,
-                                                        C // self.num_groups,
+                                                        torch.div(C,
+                                                                  self.num_groups,
+                                                                  rounding_mode='floor'),
                                                         H, W)
 
             stds = torch.std(channels_input_groups, dim=(0, 2, 3, 4))
@@ -213,7 +216,9 @@ class ClusteringStrategy(ABC):
 
     def plot_groups(self, channels_groups, means, vars):
         groups = torch.repeat_interleave(torch.arange(self.filtered_num_groups),
-                                         len(channels_groups) // self.filtered_num_groups,
+                                         torch.div(len(channels_groups),
+                                                   self.filtered_num_groups,
+                                                   rounding_mode='floor'),
                                          dim=0)
 
         # Create a scatter plot with points colored by group
@@ -305,7 +310,9 @@ class ClusteringStrategy(ABC):
         return eval_indexes
 
     def map_to_group(self, X: int):
-        group_num = (X // self.group_size) % self.filtered_num_groups
+        group_num = torch.div(X,
+                              self.group_size,
+                              rounding_mode='floor') % self.filtered_num_groups
         return group_num
 
     def get_num_occurrences(self, d):
@@ -402,7 +409,9 @@ class ClusteringStrategy(ABC):
         _, C, _, _ = channels_input.size()
 
         # calculate the N and C indices for each element of the outliers tensor
-        N_indices = outliers // C
+        N_indices = torch.div(outliers,
+                              C,
+                              rounding_mode='floor')
         C_indices = outliers % C
 
         # create a mask of ones with the same shape as the input
@@ -498,7 +507,9 @@ class SortChannelsV2(ClusteringStrategy):
         sort_metric = (mean / var) * (mean + var)
         sorted_indexes = sorted(range(len(sort_metric)),
                                 key=lambda k: sort_metric[k])
-        range_in_group = N * C // self.group_size
+        range_in_group = torch.div(N*C,
+                                   self.group_size, 
+                                   rounding_mode='floor')
         endlist = [[] for _ in range(range_in_group)]
         for index, item in enumerate(sorted_indexes):
             endlist[index % range_in_group].append(item)
