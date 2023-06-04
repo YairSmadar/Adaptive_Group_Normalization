@@ -121,9 +121,6 @@ class SimilarityGroupNorm(Module):
             print("No clustering strategy defined!")
             exit(1)
 
-        self.get_channels_clustering_for_eval(filtered_channels_input,
-                                              channelsClustering)
-
         if self.keep_best_std_groups:
 
             if self.indexes is None:
@@ -170,6 +167,9 @@ class SimilarityGroupNorm(Module):
             channelsClustering = new_indexes
             assert len(set(channelsClustering.tolist())) == N * C, \
                 "In keep_best_std_groups, there is no index for every channel"
+
+        self.get_channels_clustering_for_eval(channels_input,
+                                              channelsClustering)
 
         return channelsClustering
 
