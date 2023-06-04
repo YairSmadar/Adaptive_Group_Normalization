@@ -96,78 +96,100 @@ class SimilarityGroupNorm(Module):
         if self.strategy is not None:
             if self.keep_best_std_groups:
                 best_std_groups = self.find_best_std_groups(channels_input)
-                filtered_channels_input, included_channels = self.exclude_std_groups(channels_input, best_std_groups)
+                filtered_channels_input, best_std_channels_idx = self.exclude_std_groups(
+                    channels_input, best_std_groups)
 
                 self.strategy.filtered_num_groups = self.filtered_num_groups
 
                 best_group_size = best_std_groups.size()[0]
-                N_best_groups = torch.empty((best_group_size * N), dtype=torch.long).to(channels_input.device)
+                N_best_groups = torch.empty((best_group_size * N),
+                                            dtype=torch.long).to(
+                    channels_input.device)
 
                 for i in range(N):
-                    s = best_group_size*i
+                    s = best_group_size * i
                     e = s + best_group_size
                     N_best_groups[s:e] = best_std_groups + (self.num_groups * i)
 
             else:
                 filtered_channels_input = channels_input
 
-            channelsClustering = self.strategy.sort_channels(filtered_channels_input)
+            channelsClustering = self.strategy.sort_channels(
+                filtered_channels_input)
 
         else:
             print("No clustering strategy defined!")
             exit(1)
 
-        self.get_channels_clustering_for_eval(filtered_channels_input, channelsClustering)
+        self.get_channels_clustering_for_eval(filtered_channels_input,
+                                              channelsClustering)
 
         if self.keep_best_std_groups:
 
             if self.indexes is None:
-                self.indexes = torch.arange(0, self.num_groups * self.group_size * N).to(channels_input.device)
+                self.indexes = torch.arange(0,
+                                            self.num_groups * self.group_size * N).to(
+                    channels_input.device)
 
             # Creating a mask to select the channels to be re-clustered
-            mask = torch.ones(self.num_groups*N, dtype=torch.bool).to(channels_input.device)
+            mask = torch.ones(self.num_groups * N, dtype=torch.bool).to(
+                channels_input.device)
 
             for idx in N_best_groups:
-                mask[idx] = 0
+                mask[idx] = False
 
             # Reshaping mask to align with channel indices and repeating it according to group size
             mask = mask.unsqueeze(-1).repeat(1, self.group_size).view(-1)
 
-            # Get the channels to be re-clustered
-            channels_to_cluster = self.indexes[mask]
-
             # Creating a tensor for the new order of channels
-            new_indexes = torch.empty_like(self.indexes).to(channels_input.device)
+            new_indexes = torch.empty_like(self.indexes).to(
+                channels_input.device)
 
-            # Instead of shifting all channels, now we determine the shift individually for each channel
-            # Depending on how many unchanged groups were in front of its original group
-            original_group_of_channel = torch.div(channels_to_cluster, self.group_size, rounding_mode='floor')
+            # set the the channels value in channelsClustering to the original
+            # channels number.
+            original_channels_to_recluster_indexes = \
+            np.where(mask.cpu().detach().numpy())[0]
+            recluster_indexes_map = {}
+            sorted_c_cluster = sort(
+                channelsClustering).values.cpu().detach().numpy()
 
-            num_unclustered_before = (original_group_of_channel.unsqueeze(-1) > N_best_groups.unsqueeze(0)).sum(dim=1)
-            shifts = (num_unclustered_before * self.group_size).to(channels_input.device)
-            new_indexes[mask] = channelsClustering + shifts
+            for (c_orig, c) in zip(original_channels_to_recluster_indexes,
+                                   sorted_c_cluster):
+                recluster_indexes_map[c] = c_orig
+
+            for i, c in enumerate(channelsClustering):
+                c_item = c.item()
+                real_index = recluster_indexes_map[c_item]
+                channelsClustering[i] = real_index
+            new_indexes[mask] = channelsClustering
 
             # Placing the non-reclustered groups back in their original positions with original values
             new_indexes[~mask] = self.indexes[~mask]
 
             channelsClustering = new_indexes
+            assert len(set(channelsClustering.tolist())) == N * C, \
+                "In keep_best_std_groups, there is no index for every channel"
 
         return channelsClustering
 
     def exclude_std_groups(self, channels_input, best_std_groups):
         excluded_channels = []
+        included_channels = []
         for group_id in range(self.num_groups):
+            group_start = group_id * self.group_size
+            group_end = group_start + self.group_size
             if group_id not in best_std_groups:
-                group_start = group_id * self.group_size
-                group_end = group_start + self.group_size
                 excluded_channels.extend(list(range(group_start, group_end)))
+            else:
+                included_channels.extend(list(range(group_start, group_end)))
 
         excluded_channels = torch.tensor(excluded_channels).long().to(
             channels_input.device)
 
         channels_input_excluded = channels_input[:, excluded_channels, :, :]
+        best_std_channels_idx = torch.tensor(included_channels)
 
-        return channels_input_excluded, excluded_channels
+        return channels_input_excluded, best_std_channels_idx
 
     def find_best_std_groups(self, channels_input):
         with torch.no_grad():
@@ -177,8 +199,9 @@ class SimilarityGroupNorm(Module):
                                                         H, W)
 
             stds = torch.std(channels_input_groups, dim=(0, 2, 3, 4))
-            no_shuff_best_k = math.floor(self.num_groups * self.no_shuff_best_k_p)
-            values, indices = torch.topk(stds, no_shuff_best_k)
+            no_shuff_best_k = math.floor(
+                self.num_groups * self.no_shuff_best_k_p)
+            values, indices = torch.topk(-stds, no_shuff_best_k)
             return indices.sort().values
 
     def get_channels_clustering_for_eval(self, channels_input: torch.Tensor,
@@ -354,7 +377,8 @@ class ClusteringStrategy(ABC):
 
         return new_order
 
-    def SortChannelsOutliersKMeans(self, channels_input, method='IsolationForest'):
+    def SortChannelsOutliersKMeans(self, channels_input,
+                                   method='IsolationForest'):
         # Convert to a numpy array
         feature_vecs_np = self.create_mean_var_nparray(channels_input)
 
@@ -440,8 +464,8 @@ class ClusteringStrategy(ABC):
         var_vals = torch.var(channels_input, dim=(2, 3))
 
         # Reshape to (N*C)
-        mean_vals = mean_vals.view(-1,1)
-        var_vals = var_vals.view(-1,1)
+        mean_vals = mean_vals.view(-1, 1)
+        var_vals = var_vals.view(-1, 1)
 
         # Concatenate mean_vals and var_vals along the channel dimension
         feature_vecs = torch.cat((mean_vals, var_vals), dim=-1)
@@ -501,7 +525,7 @@ class SortChannelsV2(ClusteringStrategy):
         sort_metric = (mean / var) * (mean + var)
         sorted_indexes = sorted(range(len(sort_metric)),
                                 key=lambda k: sort_metric[k])
-        range_in_group = N*C // self.group_size
+        range_in_group = N * C // self.group_size
 
         endlist = [[] for _ in range(range_in_group)]
         for index, item in enumerate(sorted_indexes):
@@ -692,7 +716,8 @@ class SortChannelsV10(ClusteringStrategy):
 
 class SortChannelsV11(ClusteringStrategy):
     def sort_channels(self, channels_input):
-        _SortChannelsV10 = SortChannelsV10(self.filtered_num_groups, self.num_channels)
+        _SortChannelsV10 = SortChannelsV10(self.filtered_num_groups,
+                                           self.num_channels)
         channelsClustering = _SortChannelsV10.sort_channels(channels_input)
         channelsClustering = self.select_channels_indices_according_to_the_most(
             channels_input, channelsClustering
@@ -719,7 +744,8 @@ class SortChannelsV12(ClusteringStrategy):
 
         # Convert the distance matrix to a condensed distance matrix
         # (i.e., a flat array containing the upper triangular of the distance matrix)
-        distances_condensed = distances[np.triu_indices(C, k=1)].cpu().detach().numpy()
+        distances_condensed = distances[
+            np.triu_indices(C, k=1)].cpu().detach().numpy()
 
         # Perform hierarchical/agglomerative clustering
         linkage_matrix = linkage(distances_condensed, method='average')
@@ -727,7 +753,8 @@ class SortChannelsV12(ClusteringStrategy):
         # Get the order of channels
         order = leaves_list(linkage_matrix)
 
-        ret = self.create_shuff_for_total_batch(channels_input, torch.from_numpy(order))
+        ret = self.create_shuff_for_total_batch(channels_input,
+                                                torch.from_numpy(order))
 
         if global_vars.args.plot_groups:
             self.plot_groups(order, channel_means, channel_vars)
@@ -758,14 +785,17 @@ class SortChannelsV13(ClusteringStrategy):
 
 class SortChannelsV14(ClusteringStrategy):
     def sort_channels(self, channels_input):
-        return self.SortChannelsOutliersKMeans(channels_input, method='IsolationForest')
+        return self.SortChannelsOutliersKMeans(channels_input,
+                                               method='IsolationForest')
 
 
 class SortChannelsV15(ClusteringStrategy):
     def sort_channels(self, channels_input):
-        return self.SortChannelsOutliersKMeans(channels_input, method='ZScoreV1')
+        return self.SortChannelsOutliersKMeans(channels_input,
+                                               method='ZScoreV1')
 
 
 class SortChannelsV16(ClusteringStrategy):
     def sort_channels(self, channels_input):
-        return self.SortChannelsOutliersKMeans(channels_input, method='ZScoreV2')
+        return self.SortChannelsOutliersKMeans(channels_input,
+                                               method='ZScoreV2')
