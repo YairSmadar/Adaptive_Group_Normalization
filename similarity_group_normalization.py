@@ -135,33 +135,43 @@ class SimilarityGroupNorm(Module):
             for idx in N_best_groups:
                 mask[idx] = False
 
-            # Reshaping mask to align with channel indices and repeating it according to group size
+            # Reshaping mask to align with channel indices and
+            # repeating it according to group size
             mask = mask.unsqueeze(-1).repeat(1, self.group_size).view(-1)
+
+            # fake mask for get the correct indexes of the new clusters
+            old_best_std_indexes = self.indexes[~mask]
+
+            fake_mask = torch.ones(self.num_groups * N * C, dtype=torch.bool).to(
+                channels_input.device)
+
+            for idx in old_best_std_indexes:
+                fake_mask[idx] = False
+
+            # set the the channels value in channelsClustering to the original
+            # channels number.
+            original_channels_to_recluster_indexes = \
+            np.where(fake_mask.cpu().detach().numpy())[0]
 
             # Creating a tensor for the new order of channels
             new_indexes = torch.empty_like(self.indexes).to(
                 channels_input.device)
 
-            # Assuming channelsClustering, mask are torch.Tensor
-            original_channels_to_recluster_indexes = \
-            torch.nonzero(mask, as_tuple=True)[0]
+            recluster_indexes_map = {}
+            sorted_c_cluster = sort(
+                channelsClustering).values.cpu().detach().numpy()
 
-            sorted_c_cluster, indices = channelsClustering.sort()
+            for (c_orig, c) in zip(original_channels_to_recluster_indexes,
+                                   sorted_c_cluster):
+                recluster_indexes_map[c] = c_orig
 
-            # Using scatter to replace the manual mapping
-            recluster_indexes_map = torch.zeros(channelsClustering.max() + 1,
-                                                dtype=torch.long).to(
-                channels_input.device)  # assuming indices are non-negative
+            for i, c in enumerate(channelsClustering):
+                c_item = c.item()
+                real_index = recluster_indexes_map[c_item]
+                channelsClustering[i] = real_index
+            new_indexes[mask] = channelsClustering
 
-            recluster_indexes_map[
-                sorted_c_cluster] = original_channels_to_recluster_indexes
-
-            real_indices = recluster_indexes_map[channelsClustering]
-
-            new_indexes[mask] = real_indices
-
-            # Placing the non-reclustered groups back in their
-            # original positions with original values
+            # Placing the non-reclustered groups back in their original positions with original values
             new_indexes[~mask] = self.indexes[~mask]
 
             channelsClustering = new_indexes
