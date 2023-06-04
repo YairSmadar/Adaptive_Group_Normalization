@@ -173,9 +173,7 @@ class SimilarityGroupNorm(Module):
         with torch.no_grad():
             N, C, H, W = channels_input.size()
             channels_input_groups = channels_input.view(N, self.num_groups,
-                                                        torch.div(C,
-                                                                  self.num_groups,
-                                                                  rounding_mode='floor'),
+                                                        C // self.num_groups,
                                                         H, W)
 
             stds = torch.std(channels_input_groups, dim=(0, 2, 3, 4))
@@ -310,9 +308,7 @@ class ClusteringStrategy(ABC):
         return eval_indexes
 
     def map_to_group(self, X: int):
-        group_num = torch.div(X,
-                              self.group_size,
-                              rounding_mode='floor') % self.filtered_num_groups
+        group_num = (X // self.group_size) % self.filtered_num_groups
         return group_num
 
     def get_num_occurrences(self, d):
@@ -409,9 +405,7 @@ class ClusteringStrategy(ABC):
         _, C, _, _ = channels_input.size()
 
         # calculate the N and C indices for each element of the outliers tensor
-        N_indices = torch.div(outliers,
-                              C,
-                              rounding_mode='floor')
+        N_indices = outliers // C
         C_indices = outliers % C
 
         # create a mask of ones with the same shape as the input
@@ -507,9 +501,8 @@ class SortChannelsV2(ClusteringStrategy):
         sort_metric = (mean / var) * (mean + var)
         sorted_indexes = sorted(range(len(sort_metric)),
                                 key=lambda k: sort_metric[k])
-        range_in_group = torch.div(N*C,
-                                   self.group_size, 
-                                   rounding_mode='floor')
+        range_in_group = N*C // self.group_size
+
         endlist = [[] for _ in range(range_in_group)]
         for index, item in enumerate(sorted_indexes):
             endlist[index % range_in_group].append(item)
