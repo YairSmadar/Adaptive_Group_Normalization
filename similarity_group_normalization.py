@@ -145,25 +145,26 @@ class SimilarityGroupNorm(Module):
             new_indexes = torch.empty_like(self.indexes).to(
                 channels_input.device)
 
-            # set the the channels value in channelsClustering to the original
-            # channels number.
+            # Assuming channelsClustering, mask are torch.Tensor
             original_channels_to_recluster_indexes = \
-            np.where(mask.cpu().detach().numpy())[0]
-            recluster_indexes_map = {}
-            sorted_c_cluster = sort(
-                channelsClustering).values.cpu().detach().numpy()
+            torch.nonzero(mask, as_tuple=True)[0]
 
-            for (c_orig, c) in zip(original_channels_to_recluster_indexes,
-                                   sorted_c_cluster):
-                recluster_indexes_map[c] = c_orig
+            sorted_c_cluster, indices = channelsClustering.sort()
 
-            for i, c in enumerate(channelsClustering):
-                c_item = c.item()
-                real_index = recluster_indexes_map[c_item]
-                channelsClustering[i] = real_index
-            new_indexes[mask] = channelsClustering
+            # Using scatter to replace the manual mapping
+            recluster_indexes_map = torch.zeros(channelsClustering.max() + 1,
+                                                dtype=torch.long).to(
+                channels_input.device)  # assuming indices are non-negative
 
-            # Placing the non-reclustered groups back in their original positions with original values
+            recluster_indexes_map[
+                sorted_c_cluster] = original_channels_to_recluster_indexes
+
+            real_indices = recluster_indexes_map[channelsClustering]
+
+            new_indexes[mask] = real_indices
+
+            # Placing the non-reclustered groups back in their
+            # original positions with original values
             new_indexes[~mask] = self.indexes[~mask]
 
             channelsClustering = new_indexes
