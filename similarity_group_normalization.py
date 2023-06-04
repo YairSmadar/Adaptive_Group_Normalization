@@ -137,7 +137,7 @@ class SimilarityGroupNorm(Module):
             channels_to_cluster = self.indexes[mask]
 
             # Creating a tensor for the new order of channels
-            new_indexes = torch.empty_like(self.indexes).to(channels_input.devide)
+            new_indexes = torch.empty_like(self.indexes).to(channels_input.device)
 
             # Instead of shifting all channels, now we determine the shift individually for each channel
             # Depending on how many unchanged groups were in front of its original group
