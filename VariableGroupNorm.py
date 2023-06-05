@@ -18,128 +18,159 @@ class VariableGroupNormFunction(torch.autograd.Function):
             group_sizes) == C, "The sum of group sizes should equal " \
                                "the number of channels."
 
-        means = []
-        stds = []
-        out = []
+        xhats = []
+        xmus = []
+        ivars = []
+        sqrtvars = []
+        vars = []
+
         start = 0
         for group_size in group_sizes:
             end = start + group_size
             x_group = x[:, start:end, :]
-            mean = x_group.mean([-1, -2], keepdim=True)
-            std = x_group.std([-1, -2], keepdim=True)
-            x_group = (x_group - mean) / (std + eps)
-            out.append(x_group)
-            means.append(mean)
-            stds.append(std)
+            number_of_values = group_size * W * H
+
+            # step1: calculate mean
+
+            mu = torch.div(1., number_of_values) * x_group.sum(axis=(-1, -2), keepdim=True)
+
+            # step2: subtract mean vector of every trainings example
+            xmu = x_group - mu
+
+            # step3: following the lower branch - calculation denominator
+            sq = xmu ** 2
+
+            # step4: calculate variance
+            var = torch.div(1., number_of_values) * sq.sum(axis=(-1, -2), keepdim=True)
+
+            # step5: add eps for numerical stability, then sqrt
+            sqrtvar = torch.sqrt(var + eps)
+
+            # step6: invert sqrtwar
+            ivar = torch.div(1., sqrtvar)
+
+            # step7: execute normalization
+            xhat = xmu * ivar
+
+            xhats.append(xhat)
+            xmus.append(xmu)
+            ivars.append(ivar)
+            sqrtvars.append(sqrtvar)
+            vars.append(var)
+
             start = end
-        out = torch.cat(out, dim=1)
 
-        out = out * weight.view(1, C, 1) + bias.view(1, C, 1)
-        out = out.view(N, C, H, W)
+        xhats_tensor = torch.cat(xhats, dim=1)
+        xmus_tensor = torch.cat(xmus, dim=1)
+        ivars_tensor = torch.stack(ivars, dim=0)
+        sqrtvars_tensor = torch.stack(sqrtvars, dim=0)
+        vars_tensor = torch.stack(vars, dim=0)
 
-        means_tensor = torch.stack(means)
-        stds_tensor = torch.stack(stds)
+        # step8: Nor the two transformation steps
+        gammax = weight.view(1, C, 1) * xhats_tensor
 
-        ctx.save_for_backward(x, out, weight, bias, group_sizes, means_tensor,
-                              stds_tensor)
+        # step9
+        out = gammax + bias.view(1, C, 1)
+        out = out.reshape((N, C, H, W))
+
+        ctx.save_for_backward(xhats_tensor, weight, xmus_tensor,
+                              ivars_tensor, sqrtvars_tensor, vars_tensor,
+                              group_sizes)
         ctx.eps = eps
 
         return out
 
     @staticmethod
     def backward(ctx, grad_output):
+        """
+        grad_output = dout
+
+        https://kratzert.github.io/2016/02/12/understanding-the-gradient-flow-through-the-batch-normalization-layer.html
+        """
         # Get the saved tensors and epsilon from the forward pass
-        x, out, weight, bias, group_sizes, means, stds = ctx.saved_tensors
+        xhats_tensor, gammas_tensor, xmus_tensor, ivars_tensor, \
+        sqrtvars_tensor, vars_tensor, group_sizes = ctx.saved_tensors
         eps = ctx.eps
 
-        # Reshape the input tensor, output tensor, and gradient tensor to (N, C, -1)
+        # Reshape the input tensor, output tensor,
+        # and gradient tensor to (N, C, -1)
         N, C, H, W = grad_output.size()
         grad_output = grad_output.view(N, C, -1)
-        x = x.view(N, C, -1)
-        out = out.view(N, C, -1)
 
-        grad_input = grad_weight = grad_bias = None
+        dxs = []
+
+        dxs_tensor = dbeta = dgamma = None
 
         if ctx.needs_input_grad[0]:
-            # Compute the initial gradient: element-wise multiplication of the output gradient and weights
-            grad_x = grad_output * weight.view(1, C, 1)
 
-            # grad_x = dxhat
+            # step9
+            grad_outputx = grad_output * gammas_tensor.view(1, C, 1)
 
+            # part of step5
+            varPeps = vars_tensor + eps
             start = 0
             for i, group_size in enumerate(group_sizes):
                 end = start + group_size
 
-                # Extract the group-specific gradient and input, mean and std from the forward pass
-                grad_x_group = grad_x[:, start:end, :]
-                x_group = x[:, start:end, :]
-                mean = means[i]
-                std = stds[i]
+                grad_x_group_g = grad_outputx[:, start:end, :]
 
-                N_GROUP = group_size * H * W
+                # step8
+                dxhat = grad_x_group_g
 
-                # Compute gradients for mean and standard deviation
-                grad_mean = grad_x_group.sum([-1, -2], keepdim=True)  # dbeta
+                # step7
+                xmus_tensor_g = xmus_tensor[:, start:end, :]
+                dxhatMxmu = dxhat * xmus_tensor_g
+                divar = dxhatMxmu.sum(axis=[-1, -2], keepdim=True)
 
-                # grad_x_group = dgammax
-                # grad_output = dout
-                # x_group = xhat
+                ivars_tensor_g = ivars_tensor[i, :, :]
+                dxmu1 = dxhat * ivars_tensor_g
 
-                # Part 1: Compute the normalized deviation of each
-                # element in the group
-                deviation = x_group - mean
+                # step6
+                sqrtvars_tensor_g = sqrtvars_tensor[i, :, :]
+                dsqrtvar = torch.div(-1., (sqrtvars_tensor_g ** 2)) * divar
 
-                # Part 2: Multiply the deviation by the gradient
-                grad_times_deviation = grad_x_group * deviation
+                # step5
+                varPeps_g = varPeps[i, :, :]
+                dvar = 0.5 * torch.div(1., varPeps_g.sqrt()) * dsqrtvar
 
-                # Part 3: Sum over all elements in the group
-                sum_grad_times_deviation = \
-                    grad_times_deviation.sum([-1, -2], keepdim=True)
+                # step4
+                dsq = torch.div(1., group_size) * torch.ones((N, group_size, H*W)) * dvar
 
-                # Part 4: Compute the scaling factor for the gradient
-                # f(x) = 1/sqrt(x), we get f'(x) = -0.5 * x^-1.5
-                scaling_factor = (-0.5) * (std + eps).pow(-1.5)
+                # step3
+                xmus_tensor_g = xmus_tensor[:, start:end, :]
+                dxmu2 = 2 * xmus_tensor_g * dsq
 
-                # Part 5: Compute the gradient with respect to
-                # the standard deviation
-                grad_std = sum_grad_times_deviation * scaling_factor
+                # step2
+                dx1 = (dxmu1 + dxmu2)
+                dmu = -1 * dx1.sum(axis=[-1, -2], keepdim=True)
 
-                ######################################################
+                # step1
+                dx2 = torch.div(1., group_size) * torch.ones((N, group_size, H*W)) * dmu
 
-                # Compute gradients for input using the chain rule
-                # Part 1: Gradient of the group due to the mean
-                grad_due_to_mean = grad_mean / N_GROUP
-
-                # Part 2: Gradient of the group due to the standard deviation
-                grad_due_to_std = (
-                      x_group - mean) * grad_std * 2 / N_GROUP
-
-                # Part 3: Combine the two parts and normalize
-                # by the standard deviation
-                grad_x_group_combined = (
-                        grad_x_group - grad_due_to_mean - grad_due_to_std) / (
-                        std + eps).sqrt()
-
-                # Assign the computed gradient to the correct
-                # portion of the full gradient tensor
-                grad_x[:, start:end, :] = grad_x_group_combined
+                # step0
+                dx = dx1 + dx2
+                dxs.append(dx)
 
                 start = end
 
+            dxs_tensor = torch.cat(dxs, dim=1).view(dxs[0].size(0), -1, dxs[0].size(2))
+
             # Reshape the computed gradients to match the original input shape
-            grad_input = grad_x.view(N, C, H, W)
+            dxs_tensor = dxs_tensor.view(N, C, H, W)
 
-        # Compute gradients for weight and bias parameters, if required
-        if any(ctx.needs_input_grad[1:]):
-            grad_weight = (grad_output * out).sum([0, 2],
-                                                  keepdim=True).squeeze()
-            grad_bias = grad_output.sum([0, 2], keepdim=True).squeeze()
+            if any(ctx.needs_input_grad):
+                # part of step9
+                dbeta = grad_output.sum(axis=[0, 2])
 
-        return grad_input, grad_weight, grad_bias, None, None
+                # part of step8
+                grad_outputMxhat = grad_output * xhats_tensor
+                dgamma = grad_outputMxhat.sum(axis=[0, 2])
+
+        return dxs_tensor, dgamma, dbeta, None, None
 
 
 class VariableGroupNorm(nn.Module):
-    def __init__(self, num_channels, eps=1e-5):
+    def __init__(self, num_channels, eps=1e-12):
         super(VariableGroupNorm, self).__init__()
         self.num_channels = num_channels
         self.eps = eps
