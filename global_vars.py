@@ -67,10 +67,14 @@ parser.add_argument('--resume', default=None, type=str, metavar='PATH',
                     help='path to latest checkpoint (default: none)')
 parser.add_argument('--scheduler_name', default="default", type=str,
                     metavar='PATH',
-                    help='for future scheduler selection (default: "default")')
-parser.add_argument('--base_scheduler_name', default="default", type=str,
-                    metavar='PATH',
-                    help='relevant when scheduler_name=myCustomScheduler')
+                    help='for future scheduler selection (default: "default")\n'
+                         'chooses:\n'
+                         '1. default\n'
+                         '2. multisteplr\n'
+                         '3. triangular2\n'
+                         '4. extramultisteplr')
+parser.add_argument('--stop_scheduler_step_at', default=50, type=int,
+                    help='stop scheduler step at epoch number X')
 parser.add_argument('--seed', default=0, type=int,
                     help='fix all random behivers to random state (default: 0)')
 parser.add_argument('--GN_in_bt', default=False, action="store_true",
@@ -115,7 +119,9 @@ parser.add_argument('--cluster_last_batch', default=False, action="store_true",
                          'last epoch. default=cluster in the first epoch')
 parser.add_argument('--dropout_prop', default=0.2, type=float,
                     help='dropout probability')
-
+parser.add_argument('--no_shuff_best_k_p', default=1.0, type=float,
+                    help="Don't recluster best %K Classes (std) in percentages.\n"
+                         "Select 1 for not use this option.")
 
 
 def apply_config(args: Namespace, config_path: str):
@@ -303,6 +309,9 @@ def generate_wandb_name():
 
         if args.max_norm_shuffle != max_norm_shuffle_DEAFULT:
             wanda_test_name += f'_max-shuff-{args.max_norm_shuffle}'
+
+        if args.no_shuff_best_k_p != 1.0:
+            wanda_test_name += f'_ns-{args.no_shuff_best_k_p}'
 
     wanda_test_name += f'_bs-{args.batch_size}'
 

@@ -24,6 +24,7 @@ def norm2d(planes):
         return BatchNorm2d(planes)
     group_norm = global_vars.args.group_norm
     SGN_version = global_vars.args.SGN_version
+    no_shuff_best_k = global_vars.args.no_shuff_best_k_p
     if global_vars.args.group_by_size:
         if global_vars.args.group_norm_size >= planes:
             return LayerNorm(planes, eps=global_vars.args.eps)
@@ -35,7 +36,8 @@ def norm2d(planes):
         elif global_vars.args.method == "SGN":
             return sgn(numofgroups, planes, eps=global_vars.args.eps,
                        strategy=create_strategy(SGN_version, numofgroups,
-                                                planes))
+                                                planes),
+                       no_shuff_best_k_p=no_shuff_best_k)
         else:
             raise Exception("the normalization method not recognized")
     if global_vars.args.method == "GN":
@@ -45,6 +47,7 @@ def norm2d(planes):
     elif global_vars.args.method == "SGN":
         return sgn(group_norm, planes, eps=global_vars.args.eps,
                    strategy=create_strategy(SGN_version, group_norm,
-                                            planes))
+                                            planes),
+                   no_shuff_best_k_p=no_shuff_best_k)
     else:
         raise Exception("the normalization method not recognized")
