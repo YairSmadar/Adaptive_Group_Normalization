@@ -262,6 +262,9 @@ class ClusteringStrategy(ABC):
         self.num_channels = num_channels
         self.group_size = int(num_channels / num_groups)
         self.filtered_num_groups = num_groups
+        self.use_variable_gs = False
+        self.min_gs = num_groups
+        self.max_gs = num_groups
 
     @abstractmethod
     def sort_channels(self, channels_input):
@@ -389,14 +392,21 @@ class ClusteringStrategy(ABC):
 
     def KMeansConstrained_2D(self, channel_vars, channel_means):
 
+        min_size = self.group_size
+        max_size = self.group_size
+
+        if self.use_variable_gs:
+            min_size = self.min_gs
+            max_size = self.max_gs
+
         # Create a 2D tensor where each row is a channel
         # and the columns are the mean and variance
         channel_stats = torch.stack((channel_means, channel_vars), dim=1)
 
         # Perform constrained k-means clustering on the channel statistics
         kmeans = KMeansConstrained(n_clusters=self.filtered_num_groups,
-                                   size_min=self.group_size,
-                                   size_max=self.group_size,
+                                   size_min=min_size,
+                                   size_max=max_size,
                                    random_state=global_vars.args.seed)
         kmeans.fit(channel_stats.cpu().detach().numpy())
 
@@ -407,7 +417,10 @@ class ClusteringStrategy(ABC):
         # Get the indices that would sort the groups
         new_order = np.argsort(groups)
 
-        return new_order
+        # Get the sizes of each group
+        cluster_sizes = np.bincount(groups)
+
+        return new_order, torch.from_numpy(cluster_sizes)
 
     def KMeans_2D(self, channel_vars, channel_means):
 
@@ -466,7 +479,7 @@ class ClusteringStrategy(ABC):
         mean_vals, var_vals = self.get_mean_val_no_outliers(outliers,
                                                             channels_input)
 
-        new_order = self.KMeansConstrained_2D(var_vals, mean_vals)
+        new_order, _ = self.KMeansConstrained_2D(var_vals, mean_vals)
 
         ret = self.create_shuff_for_total_batch(channels_input,
                                                 torch.from_numpy(new_order))
@@ -824,7 +837,7 @@ class SortChannelsV13(ClusteringStrategy):
         channel_vars = torch.var(channels_input, dim=(0, 2, 3))
 
         # Get the indices that would sort the groups
-        new_order = self.KMeansConstrained_2D(channel_vars, channel_means)
+        new_order, _ = self.KMeansConstrained_2D(channel_vars, channel_means)
 
         ret = self.create_shuff_for_total_batch(channels_input,
                                                 torch.from_numpy(new_order))
@@ -863,7 +876,10 @@ class SortChannelsV17(ClusteringStrategy):
         channel_vars = torch.var(channels_input, dim=(0, 2, 3))
 
         # Get the indices that would sort the groups
-        new_order, cluster_sizes = self.KMeans_2D(channel_vars, channel_means)
+        self.use_variable_gs = True
+        self.min_gs = np.ceil(self.group_size*0.8)
+        self.max_gs = np.ceil(self.group_size*1.2)
+        new_order, cluster_sizes = self.KMeansConstrained_2D(channel_vars, channel_means)
 
         ret = self.create_shuff_for_total_batch(channels_input,
                                                 torch.from_numpy(new_order))
