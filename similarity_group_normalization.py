@@ -25,7 +25,7 @@ class SimilarityGroupNorm(Module):
         super(SimilarityGroupNorm, self).__init__()
         self.groupNorm = GroupNorm(num_groups, num_channels, eps=eps,
                                    affine=True)
-        self.variableGroupNorm = VariableGroupNorm(num_channels)
+        self.variableGroupNorm = VariableGroupNorm(num_groups=num_groups, eps=eps)
         self.indexes = None
         self.reverse_indexes = None
         self.groups_representation_num = None  # not used
