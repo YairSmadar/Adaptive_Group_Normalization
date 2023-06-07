@@ -45,7 +45,8 @@ class SimilarityGroupNorm(Module):
         self.eps = eps
         self.strategy = strategy
         self.no_shuff_best_k_p = no_shuff_best_k_p
-        self.cluster_sizes = torch.FloatTensor([self.group_size] * num_groups)
+        self.cluster_sizes = \
+            torch.tensor([self.group_size] * num_groups, dtype=torch.int64)
 
     def forward(self, Conv_input):
         SGN_version = global_vars.args.SGN_version
