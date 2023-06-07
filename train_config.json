@@ -1,6 +1,6 @@
 {
   "model_version": 1,
-  "SGN_version": 14,
+  "SGN_version": 17,
   "RGN_version": 1,
   "method": "SGN",
   "epochs": 100,
@@ -21,7 +21,7 @@
   "cluster_last_batch": false,
   "dropout_prop": 0.3,
   "max_norm_shuffle": 50,
-  "no_shuff_best_k_p": 0.2,
+  "no_shuff_best_k_p": 1.0,
   "scheduler_name": "default",
   "classes_to_train":
   [
