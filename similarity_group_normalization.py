@@ -42,6 +42,7 @@ class SimilarityGroupNorm(Module):
         self.eps = eps
         self.strategy = strategy
         self.no_shuff_best_k_p = no_shuff_best_k_p
+        self.recluster_num = 0
 
     def forward(self, Conv_input):
 
@@ -84,6 +85,8 @@ class SimilarityGroupNorm(Module):
         return ret
 
     def recluster(self, Conv_input):
+        self.recluster_num += 1
+
         self.indexes = self.SimilarityGroupNormClustering(clone(Conv_input)).to(
             dtype=torch.int64)
 
@@ -94,10 +97,15 @@ class SimilarityGroupNorm(Module):
 
         N, C, _, _ = channels_input.size()
         if self.strategy is not None:
-            if self.keep_best_std_groups:
+
+            should_keep_best_groups = \
+                self.keep_best_std_groups and \
+                global_vars.args.keep_best_group_num_start >= self.recluster_num
+
+            if should_keep_best_groups:
                 best_std_groups = self.find_best_std_groups(channels_input)
-                filtered_channels_input, best_std_channels_idx = self.exclude_std_groups(
-                    channels_input, best_std_groups)
+                filtered_channels_input, best_std_channels_idx = \
+                    self.exclude_std_groups(channels_input, best_std_groups)
 
                 self.strategy.filtered_num_groups = self.filtered_num_groups
 
@@ -121,7 +129,7 @@ class SimilarityGroupNorm(Module):
             print("No clustering strategy defined!")
             exit(1)
 
-        if self.keep_best_std_groups:
+        if should_keep_best_groups:
 
             if self.indexes is None:
                 self.indexes = torch.arange(0,

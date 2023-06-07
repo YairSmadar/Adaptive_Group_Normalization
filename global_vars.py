@@ -122,6 +122,8 @@ parser.add_argument('--dropout_prop', default=0.2, type=float,
 parser.add_argument('--no_shuff_best_k_p', default=1.0, type=float,
                     help="Don't recluster best %K Classes (std) in percentages.\n"
                          "Select 1 for not use this option.")
+parser.add_argument('--keep_best_group_num_start', default=0, type=float,
+                    help="start to keep best groups at recluster number no_shuff_best_start_num.")
 
 
 def apply_config(args: Namespace, config_path: str):

@@ -21,7 +21,8 @@
   "cluster_last_batch": false,
   "dropout_prop": 0.3,
   "max_norm_shuffle": 50,
-  "no_shuff_best_k_p": 0.2,
+  "no_shuff_best_k_p": 0.4,
+  "keep_best_group_num_start": 1,
   "scheduler_name": "default",
   "classes_to_train":
   [
