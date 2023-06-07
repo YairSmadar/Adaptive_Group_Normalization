@@ -877,8 +877,8 @@ class SortChannelsV17(ClusteringStrategy):
 
         # Get the indices that would sort the groups
         self.use_variable_gs = True
-        self.min_gs = np.ceil(self.group_size*0.8)
-        self.max_gs = np.ceil(self.group_size*1.2)
+        self.min_gs = np.ceil(self.group_size*0.6)
+        self.max_gs = np.ceil(self.group_size*1.4)
         new_order, cluster_sizes = self.KMeansConstrained_2D(channel_vars, channel_means)
 
         ret = self.create_shuff_for_total_batch(channels_input,
