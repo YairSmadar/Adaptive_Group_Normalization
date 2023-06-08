@@ -124,6 +124,12 @@ parser.add_argument('--no_shuff_best_k_p', default=1.0, type=float,
                          "Select 1 for not use this option.")
 parser.add_argument('--keep_best_group_num_start', default=0, type=float,
                     help="start to keep best groups at recluster number no_shuff_best_start_num.")
+parser.add_argument('--shuff_high_std_only', default=False, type=bool,
+                    help="shuffle SGN layers with high STD only.")
+parser.add_argument('--std_threshold', default=1.0, type=float,
+                    help="if shuff_high_std_only, this is use as threshold to "
+                         "the mean of the variances.")
+
 
 
 def apply_config(args: Namespace, config_path: str):
