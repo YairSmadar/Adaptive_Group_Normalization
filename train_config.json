@@ -22,7 +22,7 @@
   "dropout_prop": 0.3,
   "max_norm_shuffle": 50,
   "shuff_high_std_only": true,
-  "std_threshold": 0.5,
+  "std_threshold": 2,
   "scheduler_name": "default",
   "classes_to_train":
   [
