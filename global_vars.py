@@ -131,7 +131,6 @@ parser.add_argument('--std_threshold', default=1.0, type=float,
                          "the mean of the variances.")
 
 
-
 def apply_config(args: Namespace, config_path: str):
     """Overwrite the values in an arguments object by values of namesake
     keys in a JSON config file.
@@ -320,6 +319,9 @@ def generate_wandb_name():
 
         if args.no_shuff_best_k_p != 1.0:
             wanda_test_name += f'_ns-{args.no_shuff_best_k_p}'
+
+        if args.shuff_high_std_only:
+            wanda_test_name += f'_hso-{args.std_threshold}'
 
     wanda_test_name += f'_bs-{args.batch_size}'
 
