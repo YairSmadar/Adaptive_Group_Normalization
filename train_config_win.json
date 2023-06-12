@@ -21,11 +21,11 @@
   "plot_groups": false,
   "epoch_start_cluster": 0,
   "cluster_last_batch": false,
-  "dropout_prop": 0.3,
   "max_norm_shuffle": 70,
-  "keep_best_group_num_start": 1,
-  "shuff_high_std_only": true,
-  "scheduler_name": "extramultisteplr",
+  "shuff_thrs_std_only": true,
+  "std_threshold_l": 1,
+  "std_threshold_h": 3,
+  "scheduler_name": "default",
   "classes_to_train":
   [
     "apple",

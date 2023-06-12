@@ -99,14 +99,14 @@ class SimilarityGroupNorm(Module):
         N, C, H, W = channels_input.size()
         if self.strategy is not None:
 
-            if args.shuff_high_std_only:
+            if args.shuff_thrs_std_only:
                 channels_input_groups = channels_input.view(N, self.num_groups,
                                                             C // self.num_groups,
                                                             H, W)
 
                 stds = torch.std(channels_input_groups, dim=(0, 2, 3, 4))
 
-                if torch.mean(stds) <= args.std_threshold:
+                if args.std_threshold_l <= torch.mean(stds) <= args.std_threshold_h:
                     return
 
             should_keep_best_groups = \
