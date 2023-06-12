@@ -22,7 +22,7 @@
   "max_norm_shuffle": 50,
   "shuff_thrs_std_only": true,
   "std_threshold_l": 1,
-  "std_threshold_h": 3,
+  "std_threshold_h": 4,
   "scheduler_name": "default",
   "classes_to_train":
   [
