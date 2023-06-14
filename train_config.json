@@ -2,9 +2,9 @@
   "model_version": 1,
   "SGN_version": 17,
   "RGN_version": 1,
-  "method": "SGN",
+  "method": "GN",
   "epochs": 100,
-  "batch_size": 16,
+  "batch_size": 32,
   "lr": 0.01,
   "group_norm": 16,
   "norm_shuffle": 20,
@@ -23,7 +23,7 @@
   "shuff_thrs_std_only": false,
   "std_threshold_l": 1,
   "std_threshold_h": 4,
-  "scheduler_name": "default",
+  "scheduler_name": "lineardecay",
   "classes_to_train":
   [
     "all"

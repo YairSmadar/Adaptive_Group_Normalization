@@ -75,8 +75,12 @@ class LinearDecayScheduler(BaseScheduler):
         self.total_epochs = total_epochs
 
     def get_scheduler(self, optimizer):
+
+        start_lr = optimizer.param_groups[0]['lr']
+        end_lr = start_lr*0.1
+
         # Linear decay function
-        lmbda = lambda epoch: 1 + 9 * ((self.total_epochs - 1 - epoch) / (self.total_epochs - 1))
+        lmbda = lambda epoch: (end_lr / start_lr) + (1 - (end_lr / start_lr)) * ((self.total_epochs - 1 - epoch) / (self.total_epochs - 1))
         return LambdaLR(optimizer, lr_lambda=lmbda)
 
     def condition(self, epoch):
