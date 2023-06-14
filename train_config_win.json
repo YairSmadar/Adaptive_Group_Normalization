@@ -25,7 +25,7 @@
   "shuff_thrs_std_only": true,
   "std_threshold_l": 1,
   "std_threshold_h": 3,
-  "scheduler_name": "default",
+  "scheduler_name": "lineardecay",
   "classes_to_train":
   [
     "apple",

@@ -24,7 +24,7 @@ def main():
     # initialize the results arrays
     lr_array = []
     # get schedulers
-    scheduler_manager = SchedulerManager(args.scheduler_name)
+    scheduler_manager = SchedulerManager(args.scheduler_name, args.epochs)
     scheduler_manager.set_schedulers(optimizer)
 
     for epoch in range(args.start_epoch, args.epochs):
