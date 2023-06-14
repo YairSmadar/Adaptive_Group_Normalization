@@ -152,6 +152,9 @@ def train(train_loader, model, criterion, optimizer, epoch, get_to_start_epoch):
     end = time()
     num_of_batches = len(train_loader.batch_sampler)
     for i, (input, target) in enumerate(train_loader):
+        
+        if input.size()[0] != global_vars.args.batch_size:
+            continue
 
         if not get_to_start_epoch:
             # set the recluster boolean (for RGN & SGN layers).
@@ -239,6 +242,10 @@ def validate(val_loader, model, criterion, epoch, get_to_start_epoch=False):
     end = time()
 
     for i, (input, target) in enumerate(val_loader):
+
+        if input.size()[0] != global_vars.args.batch_size:
+            continue
+
         if not get_to_start_epoch:
             if global_vars.device_name == 'cuda':
                 target = target.cuda(non_blocking=True)
