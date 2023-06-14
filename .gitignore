@@ -134,3 +134,4 @@ dmypy.json
 /dataset/
 /wandb/
 /res/
+/RT_SED_venv/

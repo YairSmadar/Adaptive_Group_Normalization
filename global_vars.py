@@ -122,6 +122,16 @@ parser.add_argument('--dropout_prop', default=0.2, type=float,
 parser.add_argument('--no_shuff_best_k_p', default=1.0, type=float,
                     help="Don't recluster best %K Classes (std) in percentages.\n"
                          "Select 1 for not use this option.")
+parser.add_argument('--keep_best_group_num_start', default=0, type=float,
+                    help="start to keep best groups at recluster number no_shuff_best_start_num.")
+parser.add_argument('--shuff_thrs_std_only', default=False, type=bool,
+                    help="shuffle SGN layers with high STD only.")
+parser.add_argument('--std_threshold_l', default=-1, type=float,
+                    help="if shuff_thrs_std_only, this is use as low threshold to "
+                         "the mean of the variances.")
+parser.add_argument('--std_threshold_h', default=1, type=float,
+                    help="if shuff_thrs_std_only, this is use as high threshold to "
+                         "the mean of the variances.")
 
 
 def apply_config(args: Namespace, config_path: str):
@@ -312,6 +322,14 @@ def generate_wandb_name():
 
         if args.no_shuff_best_k_p != 1.0:
             wanda_test_name += f'_ns-{args.no_shuff_best_k_p}'
+
+        if args.shuff_thrs_std_only:
+            if args.std_threshold_l != -1:
+                # sto = shuffle threshold only
+                wanda_test_name += f'_sto-{args.std_threshold_l}-{args.std_threshold_h}'
+            else:
+                wanda_test_name += f'_sto-{args.std_threshold_h}'
+
 
     wanda_test_name += f'_bs-{args.batch_size}'
 

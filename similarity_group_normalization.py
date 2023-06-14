@@ -47,6 +47,7 @@ class SimilarityGroupNorm(Module):
         self.no_shuff_best_k_p = no_shuff_best_k_p
         self.cluster_sizes = \
             torch.tensor([self.group_size] * num_groups, dtype=torch.int64)
+        self.recluster_num = 0
 
     def forward(self, Conv_input):
         SGN_version = global_vars.args.SGN_version
@@ -101,30 +102,37 @@ class SimilarityGroupNorm(Module):
         return ret
 
     def recluster(self, Conv_input):
-        self.indexes = self.SimilarityGroupNormClustering(clone(Conv_input)).to(
-            dtype=torch.int64)
+        self.recluster_num += 1
 
-        self.reverse_indexes = torch.argsort(self.indexes).to(
-            Conv_input.device)
+        # updating self.indexes
+        self.SimilarityGroupNormClustering(clone(Conv_input))
+
+        if self.indexes is not None:
+            self.reverse_indexes = torch.argsort(self.indexes).to(
+                Conv_input.device)
 
     def SimilarityGroupNormClustering(self, channels_input):
-
-        N, C, _, _ = channels_input.size()
+        args = global_vars.args
+        N, C, H, W = channels_input.size()
         if self.strategy is not None:
-            if self.keep_best_std_groups:
-                best_std_groups = self.find_best_std_groups(channels_input)
-                filtered_channels_input, best_std_channels_idx = self.exclude_std_groups(
-                    channels_input, best_std_groups)
 
-                best_group_size = best_std_groups.size()[0]
-                N_best_groups = torch.empty((best_group_size * N),
-                                            dtype=torch.long).to(
-                    channels_input.device)
+            if args.shuff_thrs_std_only:
+                channels_input_groups = channels_input.view(N, self.num_groups,
+                                                            C // self.num_groups,
+                                                            H, W)
 
-                for i in range(N):
-                    s = best_group_size * i
-                    e = s + best_group_size
-                    N_best_groups[s:e] = best_std_groups + (self.num_groups * i)
+                stds = torch.std(channels_input_groups, dim=(0, 2, 3, 4))
+
+                if args.std_threshold_l <= torch.mean(stds) <= args.std_threshold_h:
+                    return
+
+            should_keep_best_groups = \
+                self.keep_best_std_groups and \
+                args.keep_best_group_num_start >= self.recluster_num
+
+            if should_keep_best_groups:
+                filtered_channels_input, best_std_channels_idx, N_best_groups = \
+                self.keep_best_std_g(channels_input)
 
             else:
                 filtered_channels_input = channels_input
@@ -137,12 +145,11 @@ class SimilarityGroupNorm(Module):
                 channelsClustering = self.strategy.sort_channels(
                     filtered_channels_input)
 
-
         else:
             print("No clustering strategy defined!")
             exit(1)
 
-        if self.keep_best_std_groups:
+        if should_keep_best_groups:
 
             if self.indexes is None:
                 self.indexes = torch.arange(0,
@@ -170,7 +177,7 @@ class SimilarityGroupNorm(Module):
             for idx in old_best_std_indexes:
                 fake_mask[idx] = False
 
-            # set the the channels value in channelsClustering to the original
+            # set the channels value in channelsClustering to the original
             # channels number.
             original_channels_to_recluster_indexes = \
                 np.where(fake_mask.cpu().detach().numpy())[0]
@@ -203,7 +210,7 @@ class SimilarityGroupNorm(Module):
         self.get_channels_clustering_for_eval(channels_input,
                                               channelsClustering)
 
-        return channelsClustering
+        self.indexes = channelsClustering.to(dtype=torch.int64)
 
     def exclude_std_groups(self, channels_input, best_std_groups):
         excluded_channels = []
@@ -223,6 +230,26 @@ class SimilarityGroupNorm(Module):
         best_std_channels_idx = torch.tensor(included_channels)
 
         return channels_input_excluded, best_std_channels_idx
+
+    def keep_best_std_g(self, channels_input):
+        N, _, _, _ = channels_input.size()
+        best_std_groups = self.find_best_std_groups(channels_input)
+        filtered_channels_input, best_std_channels_idx = \
+            self.exclude_std_groups(channels_input, best_std_groups)
+
+        self.strategy.filtered_num_groups = self.filtered_num_groups
+
+        best_group_size = best_std_groups.size()[0]
+        N_best_groups = torch.empty((best_group_size * N),
+                                    dtype=torch.long).to(
+            channels_input.device)
+
+        for i in range(N):
+            s = best_group_size * i
+            e = s + best_group_size
+            N_best_groups[s:e] = best_std_groups + (self.num_groups * i)
+
+        return filtered_channels_input, best_std_channels_idx, N_best_groups
 
     def find_best_std_groups(self, channels_input):
         with torch.no_grad():

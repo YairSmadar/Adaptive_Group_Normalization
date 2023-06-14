@@ -1,4 +1,4 @@
-from torch.optim.lr_scheduler import MultiStepLR, LinearLR, CyclicLR
+from torch.optim.lr_scheduler import MultiStepLR, LinearLR, CyclicLR, LambdaLR
 from abc import ABC, abstractmethod
 from global_vars import args
 
@@ -39,7 +39,7 @@ class MultiStepLRScheduler(BaseScheduler):
     NAME = "multisteplr"
 
     def get_scheduler(self, optimizer):
-        return MultiStepLR(optimizer=optimizer, milestones=[30,70,90],
+        return MultiStepLR(optimizer=optimizer, milestones=[30, 70, 90],
                            gamma=0.5)
 
     def condition(self, epoch):
@@ -50,7 +50,7 @@ class ExtraMultiStepLRScheduler(BaseScheduler):
     NAME = "extramultisteplr"
 
     def get_scheduler(self, optimizer):
-        return MultiStepLR(optimizer=optimizer, milestones=range(10,90,5),
+        return MultiStepLR(optimizer=optimizer, milestones=range(10, 90, 5),
                            gamma=0.95)
 
     def condition(self, epoch):
@@ -61,34 +61,55 @@ class Triangular2Scheduler(BaseScheduler):
     NAME = "triangular2"
 
     def get_scheduler(self, optimizer):
-        return CyclicLR(optimizer, base_lr=args.lr*0.1, max_lr=args.lr,
+        return CyclicLR(optimizer, base_lr=args.lr * 0.1, max_lr=args.lr,
                         step_size_up=5, step_size_down=10, mode='triangular2')
 
     def condition(self, epoch):
         return True  # Always apply this scheduler.
 
 
+class LinearDecayScheduler(BaseScheduler):
+    NAME = "lineardecay"
+
+    def __init__(self, total_epochs=100):
+        self.total_epochs = total_epochs
+
+    def get_scheduler(self, optimizer):
+        # Linear decay function
+        lmbda = lambda epoch: 1 + 9 * ((self.total_epochs - 1 - epoch) / (self.total_epochs - 1))
+        return LambdaLR(optimizer, lr_lambda=lmbda)
+
+    def condition(self, epoch):
+        return True  # Always apply this scheduler.
+
+
 class SchedulerFactory:
-    def __init__(self):
+    def __init__(self, total_epochs=100):
         self.scheduler_classes = {
             DefaultWarmUpScheduler.NAME: DefaultWarmUpScheduler,
             DefaultScheduler.NAME: DefaultScheduler,
             MultiStepLRScheduler.NAME: MultiStepLRScheduler,
             ExtraMultiStepLRScheduler.NAME: ExtraMultiStepLRScheduler,
-            Triangular2Scheduler.NAME: Triangular2Scheduler
+            Triangular2Scheduler.NAME: Triangular2Scheduler,
+            LinearDecayScheduler.NAME: LinearDecayScheduler
         }
+        self.total_epochs = total_epochs
 
     def get_scheduler(self, scheduler_name):
         scheduler_class = self.scheduler_classes.get(scheduler_name)
         if scheduler_class is None:
             raise KeyError(f'There is no scheduler name {scheduler_name}')
+
+        if scheduler_name == 'lineardecay':
+            return scheduler_class(self.total_epochs)
+
         return scheduler_class()
 
 
 class SchedulerManager:
-    def __init__(self, scheduler_name):
+    def __init__(self, scheduler_name, total_epochs=100):
         self.schedulers = []
-        self.factory = SchedulerFactory()
+        self.factory = SchedulerFactory(total_epochs)
         self.scheduler_name = scheduler_name
 
     def add_scheduler(self, scheduler_name, optimizer):
@@ -106,6 +127,8 @@ class SchedulerManager:
             self.add_scheduler(Triangular2Scheduler.NAME, optimizer)
         elif self.scheduler_name == 'extramultisteplr':
             self.add_scheduler(ExtraMultiStepLRScheduler.NAME, optimizer)
+        elif self.scheduler_name == 'lineardecay':
+            self.add_scheduler(LinearDecayScheduler.NAME, optimizer)
         else:
             raise KeyError(f'There is no scheduler name {self.scheduler_name}')
 

@@ -83,7 +83,7 @@ def main():
     global_vars.init_saveing_path()
 
     # set schedulers
-    scheduler_manager = SchedulerManager(args.scheduler_name)
+    scheduler_manager = SchedulerManager(args.scheduler_name, args.epochs)
     scheduler_manager.set_schedulers(optimizer)
 
     # get the learning rate to the starting value

@@ -19,9 +19,10 @@
   "use_wandb": true,
   "epoch_start_cluster": 10,
   "cluster_last_batch": false,
-  "dropout_prop": 0.3,
   "max_norm_shuffle": 50,
-  "no_shuff_best_k_p": 1.0,
+  "shuff_thrs_std_only": false,
+  "std_threshold_l": 1,
+  "std_threshold_h": 4,
   "scheduler_name": "default",
   "classes_to_train":
   [
