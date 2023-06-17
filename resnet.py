@@ -26,6 +26,7 @@ class ResNet(nn.Module):
         self.norm1 = norm2d(64)
 
         self.relu = nn.ReLU(inplace=True)
+        self.dropout_p = dropout_p
         self.layer1 = self._make_layer(block, 64, layers[0])
         self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
@@ -50,6 +51,12 @@ class ResNet(nn.Module):
             elif isinstance(m, sgn):
                 m.groupNorm.weight.data.fill_(1)
                 m.groupNorm.bias.data.zero_()
+
+                if global_vars.args.SGN_version == 17:
+                    for inst in m.variableGroupNorm.instance_norms:
+                        inst.weight.data.fill_(1)
+                        inst.weight.data.fill_(0)
+
             elif isinstance(m, Bottleneck):
                 n1 = m.conv1.kernel_size[0] * m.conv1.kernel_size[1] * m.conv1.out_channels
                 m.conv1.weight.data.normal_(0, math.sqrt(2. / n1))
@@ -66,6 +73,19 @@ class ResNet(nn.Module):
                         m.norm2.groupNorm.bias.data.zero_()
                         m.norm3.groupNorm.weight.data.fill_(1)
                         m.norm3.groupNorm.bias.data.zero_()
+
+                        if global_vars.args.SGN_version == 17:
+                            for inst in m.norm1.variableGroupNorm.instance_norms:
+                                inst.weight.data.fill_(1)
+                                inst.weight.data.fill_(0)
+                            for inst in m.norm2.variableGroupNorm.instance_norms:
+                                inst.weight.data.fill_(1)
+                                inst.weight.data.fill_(0)
+                            for inst in m.norm3.variableGroupNorm.instance_norms:
+                                inst.weight.data.fill_(1)
+                                inst.weight.data.fill_(0)
+
+
                     else:
                         m.norm1.weight.data.fill_(1)
                         m.norm1.bias.data.zero_()
@@ -81,7 +101,7 @@ class ResNet(nn.Module):
                     m.norm3.weight.data.fill_(1)
                     m.norm3.bias.data.zero_()
 
-    def _make_layer(self, block, planes, blocks, stride=1, ac_gn=False):
+    def _make_layer(self, block, planes, blocks, stride=1):
         downsample = None
         if stride != 1 or self.inplanes != planes * block.expansion:
             downsample = nn.Sequential(
@@ -89,7 +109,8 @@ class ResNet(nn.Module):
                 norm2d(planes * block.expansion),
             )
         layers = []
-        layers.append(block(self.inplanes, planes, self.group_norm, self.method, stride, downsample))
+        layers.append(
+            block(self.inplanes, planes, self.group_norm, self.method, stride, downsample, dropout_p=self.dropout_p))
         self.inplanes = planes * block.expansion
         for i in range(1, blocks):
             layers.append(block(self.inplanes, planes, self.group_norm, self.method))
@@ -99,6 +120,8 @@ class ResNet(nn.Module):
         x = self.conv1(x)
         x = self.norm1(x)
         x = self.relu(x)
+        if global_vars.args.model_version == 3:
+            x = self.dropout(x)
         x = self.layer1(x)
         x = self.layer2(x)
         x = self.layer3(x)
@@ -114,32 +137,46 @@ class ResNet(nn.Module):
 class Bottleneck(nn.Module):
     expansion = 4
 
-    def __init__(self, inplanes, planes, group_norm, method, stride=1, downsample=None):
+    def __init__(self, inplanes, planes, group_norm, method, stride=1, downsample=None, dropout_p=0.5):
         super(Bottleneck, self).__init__()
         self.conv1 = nn.Conv2d(inplanes, planes, kernel_size=1, bias=False)
         self.norm1 = norm2d(planes)
+        self.dropout1 = nn.Dropout(dropout_p)  # Dropout after norm1
         self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=stride, padding=1, bias=False)
         self.norm2 = norm2d(planes)
+        self.dropout2 = nn.Dropout(dropout_p)  # Dropout after norm2
         self.conv3 = nn.Conv2d(planes, planes * 4, kernel_size=1, bias=False)
         self.norm3 = norm2d(planes * 4)
+        self.dropout3 = nn.Dropout(dropout_p)  # Dropout after norm3
         self.relu = nn.ReLU(inplace=True)
         self.downsample = downsample
         self.stride = stride
 
     def forward(self, x):
         residual = x
+
         out = self.conv1(x)
         out = self.norm1(out)
         out = self.relu(out)
+        if global_vars.args.model_version == 3:
+            out = self.dropout1(out)
+
         out = self.conv2(out)
         out = self.norm2(out)
         out = self.relu(out)
+        if global_vars.args.model_version == 3:
+            out = self.dropout2(out)
+
         out = self.conv3(out)
         out = self.norm3(out)
+        if global_vars.args.model_version == 3:
+            out = self.dropout3(out)
 
         if self.downsample is not None:
             residual = self.downsample(x)
+
         out += residual
         out = self.relu(out)
 
         return out
+

@@ -1,8 +1,8 @@
 {
-  "model_version": 1,
+  "model_version": 3,
   "SGN_version": 17,
   "RGN_version": 1,
-  "method": "GN",
+  "method": "SGN",
   "epochs": 100,
   "batch_size": 32,
   "lr": 0.01,
@@ -23,7 +23,7 @@
   "shuff_thrs_std_only": false,
   "std_threshold_l": 1,
   "std_threshold_h": 4,
-  "scheduler_name": "lineardecay",
+  "scheduler_name": "default",
   "classes_to_train":
   [
     "all"
