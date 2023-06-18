@@ -55,7 +55,7 @@ class ResNet(nn.Module):
                 if global_vars.args.SGN_version == 17:
                     for inst in m.variableGroupNorm.instance_norms:
                         inst.weight.data.fill_(1)
-                        inst.weight.data.fill_(0)
+                        inst.bias.data.zero_()
 
             elif isinstance(m, Bottleneck):
                 n1 = m.conv1.kernel_size[0] * m.conv1.kernel_size[1] * m.conv1.out_channels
@@ -77,13 +77,13 @@ class ResNet(nn.Module):
                         if global_vars.args.SGN_version == 17:
                             for inst in m.norm1.variableGroupNorm.instance_norms:
                                 inst.weight.data.fill_(1)
-                                inst.weight.data.fill_(0)
+                                inst.bias.data.zero_()
                             for inst in m.norm2.variableGroupNorm.instance_norms:
                                 inst.weight.data.fill_(1)
-                                inst.weight.data.fill_(0)
+                                inst.bias.data.zero_()
                             for inst in m.norm3.variableGroupNorm.instance_norms:
                                 inst.weight.data.fill_(1)
-                                inst.weight.data.fill_(0)
+                                inst.bias.data.zero_()
 
 
                     else:
