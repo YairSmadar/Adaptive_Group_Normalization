@@ -1,53 +1,74 @@
 from torch.nn import BatchNorm2d, GroupNorm, LayerNorm
-
-import global_vars
-from global_vars import groupsBySize
 from random_group_normalization import RandomGroupNorm as rgn
 from similarity_group_normalization import SimilarityGroupNorm as sgn
 import similarity_group_normalization
 
 
-def create_strategy(SGN_version, groups_num, ch_num):
-    strategy_class_name = f'SortChannelsV{SGN_version}'
-    strategy_class = getattr(similarity_group_normalization,
-                             strategy_class_name, None)
+class NormalizationFactory:
+    def __init__(self, normalization_args):
+        self.normalization_args = normalization_args
 
-    if strategy_class is None:
-        print(f"SGN_version number {SGN_version} is not available!")
-        exit(1)
+    def create_strategy(self, group_norm, planes):
+        strategy_class_name = f'SortChannelsV{self.normalization_args["version"]}'
+        strategy_class = getattr(similarity_group_normalization, strategy_class_name, None)
 
-    return strategy_class(groups_num, ch_num)
+        if strategy_class is None:
+            raise Exception(f"{self.normalization_args['method']} version number "
+                            f"{self.normalization_args['version']} is not available!")
 
+        return strategy_class(group_norm, planes, self.normalization_args)
 
-def norm2d(planes):
-    if global_vars.args.method == "BN":
-        return BatchNorm2d(planes)
-    group_norm = global_vars.args.group_norm
-    SGN_version = global_vars.args.SGN_version
-    no_shuff_best_k = global_vars.args.no_shuff_best_k_p
-    if global_vars.args.group_by_size:
-        if global_vars.args.group_norm_size >= planes:
-            return LayerNorm(planes, eps=global_vars.args.eps)
-        numofgroups = int(groupsBySize(planes))
-        if global_vars.args.method == "GN":
-            return GroupNorm(numofgroups, planes, eps=global_vars.args.eps)
-        elif global_vars.args.method == "RGN":
-            return rgn(numofgroups, planes, eps=global_vars.args.eps)
-        elif global_vars.args.method == "SGN":
-            return sgn(numofgroups, planes, eps=global_vars.args.eps,
-                       strategy=create_strategy(SGN_version, numofgroups,
-                                                planes),
-                       no_shuff_best_k_p=no_shuff_best_k)
+    def init_norm_layer(self, norm_layer):
+        if isinstance(norm_layer, (BatchNorm2d, GroupNorm)):
+            norm_layer.weight.data.fill_(1)
+            norm_layer.bias.data.zero_()
+        elif isinstance(norm_layer, rgn):
+            norm_layer.groupNorm.weight.data.fill_(1)
+            norm_layer.groupNorm.bias.data.zero_()
+        elif isinstance(norm_layer, sgn):
+            norm_layer.groupNorm.weight.data.fill_(1)
+            norm_layer.groupNorm.bias.data.zero_()
         else:
-            raise Exception("the normalization method not recognized")
-    if global_vars.args.method == "GN":
-        return GroupNorm(group_norm, planes, eps=global_vars.args.eps)
-    elif global_vars.args.method == "RGN":
-        return rgn(group_norm, planes, eps=global_vars.args.eps)
-    elif global_vars.args.method == "SGN":
-        return sgn(group_norm, planes, eps=global_vars.args.eps,
-                   strategy=create_strategy(SGN_version, group_norm,
-                                            planes),
-                   no_shuff_best_k_p=no_shuff_best_k)
-    else:
-        raise Exception("the normalization method not recognized")
+            raise Exception("Normalization layer not recognized for initialization")
+
+    def groupsBySize(self, numofchannels):
+        return int(numofchannels / self.normalization_args["group_size"])
+
+    def create_norm2d(self, planes):
+        method = self.normalization_args["method"]
+        if method == "BN":
+            normalization_layer = BatchNorm2d(planes)
+        else:
+            group_norm = self.normalization_args["group_norm"]
+            eps = self.normalization_args["eps"]
+            if self.normalization_args["group_by_size"]:
+                if self.normalization_args["group_size"] >= planes:
+                    normalization_layer = LayerNorm(planes, eps=eps)
+                else:
+                    numofgroups = self.groupsBySize(planes)
+                    if method == "GN":
+                        normalization_layer = GroupNorm(numofgroups, planes, eps=eps)
+                    elif method == "RGN":
+                        normalization_layer = rgn(num_groups=numofgroups, num_channels=planes, eps=eps)
+                    elif method == "SGN":
+                        normalization_layer = sgn(num_groups=numofgroups, num_channels=planes, eps=eps,
+                                                  strategy=self.create_strategy(group_norm, planes),
+                                                  normalization_args=self.normalization_args)
+                    else:
+                        raise Exception("The normalization method not recognized")
+            else:
+                if method == "GN":
+                    normalization_layer = GroupNorm(group_norm, planes, eps=eps)
+                elif method == "RGN":
+                    normalization_layer = rgn(num_groups=group_norm, num_channels=planes, eps=eps)
+                elif method == "SGN":
+                    normalization_layer = sgn(num_groups=group_norm, num_channels=planes, eps=eps,
+                                              strategy=self.create_strategy(group_norm, planes),
+                                              normalization_args=self.normalization_args)
+                else:
+                    raise Exception("The normalization method not recognized")
+
+        # After you create the normalization_layer, initialize it
+        self.init_norm_layer(normalization_layer)
+
+        return normalization_layer

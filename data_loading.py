@@ -3,7 +3,6 @@ import global_vars
 from torchvision.transforms import Normalize, Compose, RandomHorizontalFlip, ToTensor
 from torchvision.datasets import CIFAR100
 from torch.utils.data import DataLoader
-import torch
 import numpy as np
 
 """

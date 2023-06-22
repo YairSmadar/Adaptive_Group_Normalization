@@ -2,28 +2,31 @@ import math
 import torch.nn as nn
 
 import global_vars
-from normalization import norm2d
+from normalization import NormalizationFactory
 from random_group_normalization import RandomGroupNorm as rgn
 from similarity_group_normalization import SimilarityGroupNorm as sgn
 
 
-def resnet50():
-    model = ResNet(Bottleneck, [3, 4, 6, 3],
-                   dropout_p=global_vars.args.dropout_prop)
+def resnet50(normalization_args: dict):
+    args = global_vars.args
+    model = ResNet(block=Bottleneck, layers=[3, 4, 6, 3],
+                   dropout_p=args.dropout_prop,
+                   normalization_args=normalization_args)
     return model
 
 
 class ResNet(nn.Module):
-    def __init__(self, block, layers, num_classes=100, dropout_p=0.2):
+    def __init__(self, block, layers, normalization_args, num_classes=100, dropout_p=0.2):
         super(ResNet, self).__init__()
-        self.method = global_vars.args.method
-        self.group_norm = global_vars.args.group_norm
+        self.normalization_factory = NormalizationFactory(normalization_args)
+        self.method = normalization_args['method']
+        self.group_norm = normalization_args['group_norm']
         self.inplanes = 64
         self.normLayers = []
         self.batch_num = 0
 
         self.conv1 = nn.Conv2d(3, 64, kernel_size=4, stride=1, bias=False)
-        self.norm1 = norm2d(64)
+        self.norm1 = self.normalization_factory.create_norm2d(64)
 
         self.relu = nn.ReLU(inplace=True)
         self.layer1 = self._make_layer(block, 64, layers[0])
@@ -81,18 +84,18 @@ class ResNet(nn.Module):
                     m.norm3.weight.data.fill_(1)
                     m.norm3.bias.data.zero_()
 
-    def _make_layer(self, block, planes, blocks, stride=1, ac_gn=False):
+    def _make_layer(self, block, planes, blocks, stride=1):
         downsample = None
         if stride != 1 or self.inplanes != planes * block.expansion:
             downsample = nn.Sequential(
                 nn.Conv2d(self.inplanes, planes * block.expansion, kernel_size=1, stride=stride, bias=False),
-                norm2d(planes * block.expansion),
+                self.normalization_factory.create_norm2d(planes * block.expansion),
             )
         layers = []
-        layers.append(block(self.inplanes, planes, self.group_norm, self.method, stride, downsample))
+        layers.append(block(self.inplanes, planes, self.normalization_factory, stride, downsample))
         self.inplanes = planes * block.expansion
         for i in range(1, blocks):
-            layers.append(block(self.inplanes, planes, self.group_norm, self.method))
+            layers.append(block(self.inplanes, planes, self.normalization_factory))
         return nn.Sequential(*layers)
 
     def forward(self, x):
@@ -114,14 +117,15 @@ class ResNet(nn.Module):
 class Bottleneck(nn.Module):
     expansion = 4
 
-    def __init__(self, inplanes, planes, group_norm, method, stride=1, downsample=None):
+    def __init__(self, inplanes, planes, normalization_factory: NormalizationFactory,
+                 stride=1, downsample=None):
         super(Bottleneck, self).__init__()
         self.conv1 = nn.Conv2d(inplanes, planes, kernel_size=1, bias=False)
-        self.norm1 = norm2d(planes)
+        self.norm1 = normalization_factory.create_norm2d(planes)
         self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=stride, padding=1, bias=False)
-        self.norm2 = norm2d(planes)
+        self.norm2 = normalization_factory.create_norm2d(planes)
         self.conv3 = nn.Conv2d(planes, planes * 4, kernel_size=1, bias=False)
-        self.norm3 = norm2d(planes * 4)
+        self.norm3 = normalization_factory.create_norm2d(planes * 4)
         self.relu = nn.ReLU(inplace=True)
         self.downsample = downsample
         self.stride = stride

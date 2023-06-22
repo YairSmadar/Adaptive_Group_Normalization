@@ -77,20 +77,10 @@ parser.add_argument('--stop_scheduler_step_at', default=50, type=int,
                     help='stop scheduler step at epoch number X')
 parser.add_argument('--seed', default=0, type=int,
                     help='fix all random behivers to random state (default: 0)')
-parser.add_argument('--GN_in_bt', default=False, action="store_true",
-                    help='Even if RGN/SGN is set, run GN in the bottle-neck')
-parser.add_argument('--use_k_means', default=False, action="store_true",
-                    help='use k-means algo when norm method is SGN')
-parser.add_argument('--shuf_each_batch', default=False, action="store_true",
-                    help='re-cluster the channels each batch')
 parser.add_argument('--classes_to_train', nargs='+', default=[],
                     help='two names of classes (like bear/wolf')
-parser.add_argument('--plot_std', default=False, action="store_true",
-                    help='plot std for first batch')
 parser.add_argument('--plot_groups', default=False, action="store_true",
                     help='plot groups')
-parser.add_argument('--save_shuff_idxs', default=False, action="store_true",
-                    help='Save shuffle indexes of the full epoch and apply them on the rest of the epoch')
 parser.add_argument('--config', type=str, default='',
                     help='path to json file of training configuration')
 parser.add_argument('--SGN_version', default=1, type=int,
@@ -114,9 +104,6 @@ parser.add_argument('--use_wandb', default=False, action="store_true",
                     help='use weights&biases')
 parser.add_argument('--epoch_start_cluster', default=0,
                     help='epoch number to start cluster from')
-parser.add_argument('--cluster_last_batch', default=False, action="store_true",
-                    help='when getting to epoch of clustering, cluster at'
-                         'last epoch. default=cluster in the first epoch')
 parser.add_argument('--dropout_prop', default=0.2, type=float,
                     help='dropout probability')
 parser.add_argument('--no_shuff_best_k_p', default=1.0, type=float,
@@ -180,14 +167,10 @@ device_name = 'cuda' if is_available() else 'cpu'
 device = device(device_name)
 
 recluster = True
-train_mode = True
 before_shuffle = True
 best_state_dict = None
 zero_state_dict = None
 best_prec1 = 0
-
-generator = Generator()
-generator.manual_seed(args.seed)
 epoch_num = 0
 
 # initialize the results arrays
@@ -268,7 +251,6 @@ def printParameters():
     print('save weights = ', args.save_weights)
     print('saveing_path = ', args.saveing_path)
     print('resume = ', args.resume)
-    print('GN in bottle-neck = ', args.GN_in_bt)
 
 
 def init_saveing_path():
@@ -311,9 +293,6 @@ def generate_wandb_name():
 
         if args.epoch_start_cluster != 0:
             wanda_test_name += f'_epoch-start-cluster-{args.epoch_start_cluster}'
-
-        if args.cluster_last_batch:
-            wanda_test_name += f'_cluster-last_batch'
 
         wanda_test_name += f'_shuff-every-ep-{args.norm_shuffle}'
 
@@ -371,7 +350,3 @@ def load_checkpoint(model, optimizer):
     train_losses, test_losses = checkpoint['train_losses'], checkpoint[
         'test_losses']
     return model, optimizer
-
-
-def groupsBySize(numofchannels):
-    return (numofchannels / args.group_norm_size)

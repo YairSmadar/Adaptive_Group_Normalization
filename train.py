@@ -27,7 +27,6 @@ use_deterministic_algorithms(True)
 
 
 def main():
-
     args = global_vars.args
 
     if global_vars.args.use_wandb:
@@ -43,15 +42,37 @@ def main():
 
     # create model
     print("=> creating model resnet50")
-    model = resnet50()
+
+    # CIFAR100 data loading code
+    train_loader, val_loader, reclustring_loader = getLoaders(args.dataset, global_vars.generator)
+
+    normalization_args = \
+        {
+            "method": args.method,
+            "version": args.SGN_version if args.method == 'SGN' else args.RGN_version,
+            "group_by_size": args.group_by_size,
+            "group_size": args.group_norm_size if args.group_by_size else args.group_norm,
+            "group_norm": args.group_norm,
+            "no_shuff_best_k_p": args.no_shuff_best_k_p,
+            "number_of_batches": len(train_loader),
+            "shuff_thrs_std_only": args.shuff_thrs_std_only,
+            "std_threshold_l": args.std_threshold_l,
+            "std_threshold_h": args.std_threshold_h,
+            "keep_best_group_num_start": args.keep_best_group_num_start,
+            "epoch_start_cluster": args.epoch_start_cluster,
+            "riar": args.riar,
+            "plot_groups": args.plot_groups,
+            "max_norm_shuffle": args.max_norm_shuffle,
+            "num_of_epch_to_shuffle": args.norm_shuffle,
+            "eps": args.eps
+        }
+
+    model = resnet50(normalization_args=normalization_args)
     model = DataParallel(model).to(global_vars.device)
 
     # define loss function (criterion) and optimizer
     criterion = CrossEntropyLoss().to(global_vars.device)
     optimizer = SGD(model.parameters(), args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
-
-    # CIFAR100 data loading code
-    train_loader, val_loader, reclustring_loader = getLoaders(args.dataset, global_vars.generator)
 
     if args.resume:
         # optionally resume from a checkpoint
@@ -135,7 +156,6 @@ def main():
 
 
 def train(train_loader, model, criterion, optimizer, epoch, get_to_start_epoch):
-
     epoch_time = time()
     batch_time = AverageMeter()
     data_time = AverageMeter()
@@ -147,31 +167,11 @@ def train(train_loader, model, criterion, optimizer, epoch, get_to_start_epoch):
 
     # switch to train mode
     model.train()
-    global_vars.train_mode = True
 
     end = time()
-    num_of_batches = len(train_loader.batch_sampler)
     for i, (input, target) in enumerate(train_loader):
 
         if not get_to_start_epoch:
-            # set the recluster boolean (for RGN & SGN layers).
-            if global_vars.is_agn:
-                if global_vars.args.cluster_last_batch:
-                    global_vars.recluster = (i == num_of_batches - 1)
-                else:
-                    global_vars.recluster = (i == 0)
-
-                shifted_epoch = epoch + global_vars.args.epoch_start_cluster
-                epoch_clustring_loop = shifted_epoch % global_vars.args.norm_shuffle
-                if global_vars.recluster:
-                    global_vars.recluster = (
-                                                        epoch_clustring_loop < global_vars.args.riar) and epoch < global_vars.args.max_norm_shuffle
-
-                if global_vars.args.shuf_each_batch:
-                    global_vars.recluster = True
-
-                if global_vars.args.save_shuff_idxs and (epoch_clustring_loop < global_vars.args.riar):
-                    global_vars.recluster = True
 
             # measure data loading time
             data_time.update(time() - end)
@@ -213,7 +213,8 @@ def train(train_loader, model, criterion, optimizer, epoch, get_to_start_epoch):
 
     if not get_to_start_epoch:
         print(
-            'Train:\t[{0}]\tLoss {loss.avg:.4f}\tPrec@1 {top1.avg:.3f}\tPrec@5 {top5.avg:.3f}\n'.format(epoch, loss=losses,
+            'Train:\t[{0}]\tLoss {loss.avg:.4f}\tPrec@1 {top1.avg:.3f}\tPrec@5 {top5.avg:.3f}\n'.format(epoch,
+                                                                                                        loss=losses,
                                                                                                         top1=top1,
                                                                                                         top5=top5))
 
@@ -229,9 +230,6 @@ def validate(val_loader, model, criterion, epoch, get_to_start_epoch=False):
     top5 = AverageMeter()
 
     print_freq = global_vars.args.print_freq
-
-    global_vars.recluster = False  # no need to recluster in validation
-    global_vars.train_mode = False
 
     # switch to evaluate mode
     model.eval()
@@ -267,9 +265,10 @@ def validate(val_loader, model, criterion, epoch, get_to_start_epoch=False):
                     epoch, i, len(val_loader), batch_time=batch_time, loss=losses, top1=top1, top5=top5))
 
     if not get_to_start_epoch:
-        print('Test:\t[{0}]\tLoss {loss.avg:.4f}\tPrec@1 {top1.avg:.3f}\tPrec@5 {top5.avg:.3f}\n'.format(epoch, loss=losses,
+        print('Test:\t[{0}]\tLoss {loss.avg:.4f}\tPrec@1 {top1.avg:.3f}\tPrec@5 {top5.avg:.3f}\n'.format(epoch,
+                                                                                                         loss=losses,
                                                                                                          top1=top1,
-                                                                                                        top5=top5))
+                                                                                                         top5=top5))
 
     print(f"Total Eval {epoch} time: {time() - eval_time}\n")
 
@@ -325,5 +324,3 @@ def accuracy(output, target, topk=(1,)):
 
 if __name__ == '__main__':
     main()
-
-

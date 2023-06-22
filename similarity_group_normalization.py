@@ -1,10 +1,8 @@
 import math
-
 import numpy as np
 import torch
 from torch import clone, tensor, sort, zeros_like, cat, ceil, floor
 from torch.nn import Module, GroupNorm
-import global_vars
 from agn_utils import getLayerIndex
 import heapq
 from scipy.cluster.hierarchy import linkage, leaves_list
@@ -12,15 +10,17 @@ from k_means_constrained import KMeansConstrained
 from sklearn.ensemble import IsolationForest
 from scipy.stats import zscore
 from abc import ABC, abstractmethod
-
-if global_vars.args.plot_groups:
-    import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 
 
 class SimilarityGroupNorm(Module):
     def __init__(self, num_groups: int, num_channels: int = 32, eps=1e-12,
-                 strategy=None, no_shuff_best_k_p: float = 1.0):
+                 strategy=None, normalization_args=None):
         super(SimilarityGroupNorm, self).__init__()
+
+        if normalization_args is None:
+            raise Exception("SGN: Error! normalization_args in None!")
+
         self.groupNorm = GroupNorm(num_groups, num_channels, eps=eps,
                                    affine=True)
         self.indexes = None
@@ -32,34 +32,42 @@ class SimilarityGroupNorm(Module):
         self.num_groups = num_groups
         self.num_channels = num_channels
         self.group_size = int(num_channels / num_groups)
-        if no_shuff_best_k_p != 1.0 and \
-                math.floor(self.num_groups * no_shuff_best_k_p) != 0:
+        if normalization_args["no_shuff_best_k_p"] != 1.0 and \
+                math.floor(self.num_groups * normalization_args["no_shuff_best_k_p"]) != 0:
             self.keep_best_std_groups = True
             self.filtered_num_groups = \
-                num_groups - math.floor(self.num_groups * no_shuff_best_k_p)
+                num_groups - math.floor(self.num_groups * normalization_args["no_shuff_best_k_p"])
         else:
             self.keep_best_std_groups = False
         self.eps = eps
         self.strategy = strategy
-        self.no_shuff_best_k_p = no_shuff_best_k_p
+        self.no_shuff_best_k_p = normalization_args["no_shuff_best_k_p"]
         self.recluster_num = 0
+        self.normalization_args = normalization_args
+        self.samples_so_far = 0
+        self.batches_so_far = 0
+        self.epoch_num = 0
+        self.is_first_batch_in_epoch = True
+        self.next_is_first_batch = False
 
     def forward(self, Conv_input):
 
+        need_to_recluster = self.check_if_need_to_recluster()
+
         # start shuffle at epoch > 0
-        if global_vars.args.epoch_start_cluster > global_vars.epoch_num:
+        if self.normalization_args["epoch_start_cluster"] > self.epoch_num:
             return self.groupNorm(Conv_input)
 
         N, C, H, W = Conv_input.size()
 
-        if global_vars.recluster:
+        if need_to_recluster:
             self.recluster(Conv_input)
 
         # in case using shuffle last batch
         if self.indexes is None:
             return self.groupNorm(Conv_input)
 
-        if global_vars.train_mode:
+        if self.training:
             indexes = self.indexes
             reverse_indexes = self.reverse_indexes
         else:
@@ -84,6 +92,37 @@ class SimilarityGroupNorm(Module):
 
         return ret
 
+    def check_if_need_to_recluster(self):
+
+        if not self.training:
+            return False
+
+        self.update_batch_epoch_nums()
+
+        shifted_epoch = self.epoch_num + self.normalization_args["epoch_start_cluster"]
+        epoch_clustring_loop = shifted_epoch % self.normalization_args["num_of_epch_to_shuffle"]
+
+        if self.is_first_batch_in_epoch:
+            need_to_recluster = (epoch_clustring_loop < self.normalization_args["riar"]) and \
+                                    self.epoch_num < self.normalization_args["max_norm_shuffle"]
+            self.is_first_batch_in_epoch = False
+        else:
+            need_to_recluster = False
+
+        return need_to_recluster
+
+    def update_batch_epoch_nums(self):
+        self.batches_so_far += 1
+
+        # now is next batch
+        if self.next_is_first_batch:
+            self.is_first_batch_in_epoch = True
+            self.next_is_first_batch = False
+
+        if self.normalization_args["number_of_batches"] % self.batches_so_far == 0:
+            self.epoch_num += 1
+            self.next_is_first_batch = True
+
     def recluster(self, Conv_input):
         self.recluster_num += 1
 
@@ -95,27 +134,27 @@ class SimilarityGroupNorm(Module):
                 Conv_input.device)
 
     def SimilarityGroupNormClustering(self, channels_input):
-        args = global_vars.args
         N, C, H, W = channels_input.size()
         if self.strategy is not None:
 
-            if args.shuff_thrs_std_only:
+            if self.normalization_args["shuff_thrs_std_only"]:
                 channels_input_groups = channels_input.view(N, self.num_groups,
                                                             C // self.num_groups,
                                                             H, W)
 
                 stds = torch.std(channels_input_groups, dim=(0, 2, 3, 4))
 
-                if args.std_threshold_l <= torch.mean(stds) <= args.std_threshold_h:
+                if self.normalization_args["std_threshold_l"] <= torch.mean(stds) <= \
+                        self.normalization_args["std_threshold_h"]:
                     return
 
             should_keep_best_groups = \
                 self.keep_best_std_groups and \
-                args.keep_best_group_num_start >= self.recluster_num
+                self.normalization_args["keep_best_group_num_start"] >= self.recluster_num
 
             if should_keep_best_groups:
                 filtered_channels_input, best_std_channels_idx, N_best_groups = \
-                self.keep_best_std_g(channels_input)
+                    self.keep_best_std_g(channels_input)
 
             else:
                 filtered_channels_input = channels_input
@@ -154,10 +193,10 @@ class SimilarityGroupNorm(Module):
             for idx in old_best_std_indexes:
                 fake_mask[idx] = False
 
-            # set the the channels value in channelsClustering to the original
+            # set the channels value in channelsClustering to the original
             # channels number.
             original_channels_to_recluster_indexes = \
-            np.where(fake_mask.cpu().detach().numpy())[0]
+                np.where(fake_mask.cpu().detach().numpy())[0]
 
             # Creating a tensor for the new order of channels
             new_indexes = torch.empty_like(self.indexes).to(
@@ -246,7 +285,7 @@ class SimilarityGroupNorm(Module):
 
         # in case the channels are shuffle the same for every image,
         # We used this from version 10 and above
-        if global_vars.args.SGN_version >= 10:
+        if self.normalization_args["SGN_version"] >= 10:
             self.eval_indexes = channelsClustering
             self.eval_reverse_indexes = torch.argsort(self.eval_indexes).to(
                 channels_input.device)
@@ -262,11 +301,12 @@ class SimilarityGroupNorm(Module):
 
 
 class ClusteringStrategy(ABC):
-    def __init__(self, num_groups: int, num_channels: int = 32):
+    def __init__(self, num_groups: int, num_channels: int = 32, normalization_args: dict = None):
         self.num_groups = num_groups
         self.num_channels = num_channels
         self.group_size = int(num_channels / num_groups)
         self.filtered_num_groups = num_groups
+        self.normalization_args = normalization_args
 
     @abstractmethod
     def sort_channels(self, channels_input):
@@ -402,7 +442,7 @@ class ClusteringStrategy(ABC):
         kmeans = KMeansConstrained(n_clusters=self.filtered_num_groups,
                                    size_min=self.group_size,
                                    size_max=self.group_size,
-                                   random_state=global_vars.args.seed)
+                                   random_state=0)
         kmeans.fit(channel_stats.cpu().detach().numpy())
 
         # The labels_ attribute of the fitted model
@@ -453,7 +493,7 @@ class ClusteringStrategy(ABC):
         ret = self.create_shuff_for_total_batch(channels_input,
                                                 torch.from_numpy(new_order))
 
-        if global_vars.args.plot_groups:
+        if self.normalization_args["plot_groups"]:
             channel_means = channels_input.mean(dim=(0, 2, 3))
             channel_vars = channels_input.var(dim=(0, 2, 3))
 
@@ -602,16 +642,16 @@ class SortChannelsV4(ClusteringStrategy):
             n_clusters=int(self.filtered_num_groups),
             # size_min=groupSize,
             # size_max=groupSize,
-            random_state=global_vars.args.seed
+            random_state=0
         )
         norm_df, df = self.get_df(channels_input)
 
         np_df = norm_df.detach().cpu().numpy()
         np_clusters = clf.fit_predict(np_df)
-        clusters = tensor(np_clusters, device=global_vars.device)
+        clusters = tensor(np_clusters, device=channels_input.device)
 
         indexes = sort(clusters)[1]
-        channelsClustering = zeros_like(clusters, device=global_vars.device)
+        channelsClustering = zeros_like(clusters, device=channels_input.device)
         for g in range(self.filtered_num_groups):
             for i in range(self.group_size):
                 channelsClustering[
@@ -632,7 +672,7 @@ class SortChannelsV4(ClusteringStrategy):
         med2 = int(floor(Vsize * tensor([0.5])))
         med3 = int(floor(Vsize * tensor([0.75])))
         madian3 = sorted_channel_dist[:, [med1, med2, med3]].to(
-            device=global_vars.device)
+            device=channels_input.device)
         df = cat([mean, var, std], dim=0)  #
         norm_df = df.clone()
         # for i in range(norm_df.shape[1]):
@@ -702,7 +742,7 @@ class SortChannelsV8(ClusteringStrategy):
         sort_metric = self.harmonic_mean(channels_input)
 
         channelsClustering = torch.argsort(sort_metric)
-        if global_vars.args.plot_groups:
+        if self.normalization_args["plot_groups"]:
             N, C, H, W = channels_input.size()
             t = channels_input.reshape(N * C, H * W)
             channel_means = t.mean(dim=1)
@@ -742,7 +782,7 @@ class SortChannelsV10(ClusteringStrategy):
         channelsClustering = \
             (channelsClustering.reshape(N, C) + factors.unsqueeze(1)).view(-1)
 
-        if global_vars.args.plot_groups:
+        if self.normalization_args["plot_groups"]:
             channel_means = channels_input.mean(dim=(0, 2, 3))
             channel_vars = channels_input.var(dim=(0, 2, 3))
 
@@ -793,7 +833,7 @@ class SortChannelsV12(ClusteringStrategy):
         ret = self.create_shuff_for_total_batch(channels_input,
                                                 torch.from_numpy(order))
 
-        if global_vars.args.plot_groups:
+        if self.normalization_args["plot_groups"]:
             self.plot_groups(order, channel_means, channel_vars)
 
         return ret.to(channels_input.device)
@@ -811,7 +851,7 @@ class SortChannelsV13(ClusteringStrategy):
         ret = self.create_shuff_for_total_batch(channels_input,
                                                 torch.from_numpy(new_order))
 
-        if global_vars.args.plot_groups:
+        if self.normalization_args["plot_groups"]:
             channel_means = channels_input.mean(dim=(0, 2, 3))
             channel_vars = channels_input.var(dim=(0, 2, 3))
 

@@ -1,12 +1,11 @@
 import torch
 from torch import sort, randperm
 from torch.nn import Module, GroupNorm
-import global_vars
 from agn_utils import getLayerIndex
 
 
 class RandomGroupNorm(Module):
-    def __init__(self, num_groups: int, num_channels: int = 32, eps=1e-12):
+    def __init__(self, num_groups: int, num_channels: int = 32, eps=1e-12, normalization_args=None):
         super(RandomGroupNorm, self).__init__()
         self.groupNorm = GroupNorm(num_groups, num_channels, eps=eps, affine=True)
         self.indexes = None
@@ -17,22 +16,37 @@ class RandomGroupNorm(Module):
         self.group_size = int(num_channels / num_groups)
         self.eval_indexes = None
         self.eval_reverse_indexes = None
+        self.generator = torch.Generator()
+        self.generator.manual_seed(0)
+
+        if normalization_args is None:
+            print("RGN: Error! normalization_args is None!")
+            exit(1)
+
+        self.normalization_args = normalization_args
+        self.samples_so_far = 0
+        self.batches_so_far = 0
+        self.epoch_num = 0
+        self.is_first_batch_in_epoch = True
+        self.next_is_first_batch = False
 
     def forward(self, Conv_input):
         N, C, W, H = Conv_input.shape
 
+        need_to_recluster = self.check_if_need_to_recluster()
+
         # start shuffle at epoch > 0
-        if global_vars.args.epoch_start_cluster > global_vars.epoch_num:
+        if self.normalization_args["epoch_start_cluster"] > self.epoch_num:
             return self.groupNorm(Conv_input)
 
-        if global_vars.recluster:
+        if need_to_recluster:
             self.recluster(Conv_input)
 
         # in case using shuffle last batch
         if self.indexes is None:
             return self.groupNorm(Conv_input)
 
-        if global_vars.train_mode:
+        if self.training:
             indexes = self.indexes
             reverse_indexes = self.reverse_indexes
         else:
@@ -59,13 +73,44 @@ class RandomGroupNorm(Module):
 
         return ret
 
+    def check_if_need_to_recluster(self):
+
+        if not self.training:
+            return False
+
+        self.update_batch_epoch_nums()
+
+        shifted_epoch = self.epoch_num + self.normalization_args["epoch_start_cluster"]
+        epoch_clustring_loop = shifted_epoch % self.normalization_args["num_of_epch_to_shuffle"]
+
+        if self.is_first_batch_in_epoch:
+            need_to_recluster = (epoch_clustring_loop < self.normalization_args["riar"]) and \
+                                self.epoch_num < self.normalization_args["max_norm_shuffle"]
+            self.is_first_batch_in_epoch = False
+        else:
+            need_to_recluster = False
+
+        return need_to_recluster
+
+    def update_batch_epoch_nums(self):
+        self.batches_so_far += 1
+
+        # now is next batch
+        if self.next_is_first_batch:
+            self.is_first_batch_in_epoch = True
+            self.next_is_first_batch = False
+
+        if self.normalization_args["number_of_batches"] % self.batches_so_far == 0:
+            self.epoch_num += 1
+            self.next_is_first_batch = True
+
     def recluster(self, Conv_input):
         N, C, W, H = Conv_input.shape
-        RGN_version = global_vars.args.RGN_version
+        RGN_version = self.normalization_args["RGN_version"]
 
         # random all channels (N*C)
         if RGN_version == 1:
-            self.indexes = sort(randperm(N*C, generator=global_vars.generator))[1].to(
+            self.indexes = sort(randperm(N*C, generator=self.generator))[1].to(
                                             Conv_input.device)
             self.reverse_indexes = torch.argsort(self.indexes).to(
                 Conv_input.device)
@@ -75,7 +120,7 @@ class RandomGroupNorm(Module):
 
         # random only in the same image, all images the same
         elif RGN_version == 2:
-            self.indexes = sort(randperm(C, generator=global_vars.generator))[1].to(
+            self.indexes = sort(randperm(C, generator=self.generator))[1].to(
                                             Conv_input.device)
             factors = (torch.arange(0, N) * C).to(Conv_input.device)
             self.indexes = torch.cat([self.indexes] * N)
