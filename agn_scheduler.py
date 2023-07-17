@@ -25,6 +25,8 @@ class AGNScheduler:
 
     def update_recluster(self):
 
+        self.epoch_num += 1
+
         # update use_gn flag
         self.use_gn = self.epoch_start_cluster > self.epoch_num
 
@@ -32,8 +34,6 @@ class AGNScheduler:
         if not self.model.training:
             self.recluster = False
             return
-
-        self.epoch_num += 1
 
         epoch_clustring_loop = self.epoch_num % self.num_of_epch_to_shuffle
 
