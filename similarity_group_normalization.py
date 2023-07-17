@@ -3,7 +3,6 @@ import numpy as np
 import torch
 from torch import clone, tensor, sort, zeros_like, cat, ceil, floor
 from torch.nn import Module, GroupNorm
-from agn_utils import getLayerIndex
 import heapq
 from scipy.cluster.hierarchy import linkage, leaves_list
 from k_means_constrained import KMeansConstrained
@@ -28,7 +27,6 @@ class SimilarityGroupNorm(Module):
         self.groups_representation_num = None  # not used
         self.eval_indexes = None
         self.eval_reverse_indexes = None
-        self.layer_index = getLayerIndex()
         self.num_groups = num_groups
         self.num_channels = num_channels
         self.group_size = int(num_channels / num_groups)
@@ -44,18 +42,17 @@ class SimilarityGroupNorm(Module):
         self.no_shuff_best_k_p = normalization_args["no_shuff_best_k_p"]
         self.recluster_num = 0
         self.normalization_args = normalization_args
-        self.samples_so_far = 0
-        self.batches_so_far = 0
-        self.epoch_num = 0
-        self.is_first_batch_in_epoch = True
-        self.next_is_first_batch = False
+
+        # those flags are updated in the AGN scheduler
         self.need_to_recluster = False
+        self.use_gn = False
 
     def forward(self, Conv_input):
 
         # start shuffle at epoch > 0
-        if self.normalization_args["epoch_start_cluster"] > self.epoch_num:
+        if self.use_gn:
             return self.groupNorm(Conv_input)
+            self.use_gn = False
 
         N, C, H, W = Conv_input.size()
 

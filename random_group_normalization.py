@@ -1,7 +1,6 @@
 import torch
 from torch import sort, randperm
 from torch.nn import Module, GroupNorm
-from agn_utils import getLayerIndex
 
 
 class RandomGroupNorm(Module):
@@ -10,7 +9,6 @@ class RandomGroupNorm(Module):
         self.groupNorm = GroupNorm(num_groups, num_channels, eps=eps, affine=True)
         self.indexes = None
         self.reverse_indexes = None
-        self.layer_index = getLayerIndex()
         self.num_groups = num_groups
         self.num_channels = num_channels
         self.group_size = int(num_channels / num_groups)
