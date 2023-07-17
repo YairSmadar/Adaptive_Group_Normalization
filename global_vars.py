@@ -171,6 +171,9 @@ before_shuffle = True
 best_state_dict = None
 zero_state_dict = None
 best_prec1 = 0
+
+generator = Generator()
+generator.manual_seed(args.seed)
 epoch_num = 0
 
 # initialize the results arrays
