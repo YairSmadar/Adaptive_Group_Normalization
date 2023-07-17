@@ -41,6 +41,7 @@ class RandomGroupNorm(Module):
 
         if self.need_to_recluster:
             self.recluster(Conv_input)
+            self.need_to_recluster = False
 
         # in case using shuffle last batch
         if self.indexes is None:
