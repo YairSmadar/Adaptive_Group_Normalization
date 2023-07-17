@@ -17,6 +17,8 @@ from torch.nn import CrossEntropyLoss, DataParallel
 from torch.optim import SGD
 import torch
 
+from agn_scheduler import AGNScheduler
+
 seed1(global_vars.args.seed)
 seed2(global_vars.args.seed)
 if is_available():
@@ -74,6 +76,11 @@ def main():
     criterion = CrossEntropyLoss().to(global_vars.device)
     optimizer = SGD(model.parameters(), args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
 
+    sgn_scheduler = AGNScheduler(model.module, normalization_args["epoch_start_cluster"],
+                                 normalization_args["num_of_epch_to_shuffle"],
+                                 normalization_args["riar"],
+                                 normalization_args["max_norm_shuffle"])
+
     if args.resume:
         # optionally resume from a checkpoint
         if isfile(args.resume):
@@ -113,6 +120,9 @@ def main():
         optimizer.zero_grad()
         optimizer.step()
 
+        # update the re-cluster flag
+        sgn_scheduler.step()
+
         # adjust the learning rate
         scheduler_manager.schedulers_step(epoch)
 
@@ -125,6 +135,9 @@ def main():
         get_to_start_epoch = False
         if epoch < args.start_epoch:
             get_to_start_epoch = True
+
+        # update the re-cluster flag
+        sgn_scheduler.step()
 
         # train for one epoch and evaluate on validation set
         train_loss, train_prc1, train_prc5 = train(train_loader, model, criterion, optimizer, epoch, get_to_start_epoch)
@@ -145,7 +158,7 @@ def main():
                     else wandb.run.summary["best_test_loss"]
 
         if not get_to_start_epoch:
-            # save epoch prcitions and losses
+            # save epoch prec and losses
             global_vars.save_results(train_loss, train_prc1, train_prc5, test_loss, test_prc1, test_prc5)
 
             # adjust the learning rate
