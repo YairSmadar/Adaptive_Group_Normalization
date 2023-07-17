@@ -52,7 +52,6 @@ class SimilarityGroupNorm(Module):
         # start shuffle at epoch > 0
         if self.use_gn:
             return self.groupNorm(Conv_input)
-            self.use_gn = False
 
         N, C, H, W = Conv_input.size()
 

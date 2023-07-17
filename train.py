@@ -136,6 +136,9 @@ def main():
         if epoch < args.start_epoch:
             get_to_start_epoch = True
 
+        # switch to train mode
+        model.train()
+
         # update the re-cluster flag
         sgn_scheduler.step()
 
@@ -177,9 +180,6 @@ def train(train_loader, model, criterion, optimizer, epoch, get_to_start_epoch):
     top5 = AverageMeter()
 
     print_freq = global_vars.args.print_freq
-
-    # switch to train mode
-    model.train()
 
     end = time()
     for i, (input, target) in enumerate(train_loader):

@@ -38,4 +38,4 @@ class AGNScheduler:
         epoch_clustring_loop = self.epoch_num % self.num_of_epch_to_shuffle
 
         self.recluster = (epoch_clustring_loop < self.riar) and \
-                         self.max_norm_shuffle > self.epoch_num >= self.epoch_start_cluster
+                         (self.max_norm_shuffle > self.epoch_num >= self.epoch_start_cluster)
