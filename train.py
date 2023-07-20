@@ -56,7 +56,6 @@ def main():
             "group_size": args.group_norm_size if args.group_by_size else args.group_norm,
             "group_norm": args.group_norm,
             "no_shuff_best_k_p": args.no_shuff_best_k_p,
-            "number_of_batches": len(train_loader),
             "shuff_thrs_std_only": args.shuff_thrs_std_only,
             "std_threshold_l": args.std_threshold_l,
             "std_threshold_h": args.std_threshold_h,

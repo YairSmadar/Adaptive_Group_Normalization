@@ -52,7 +52,7 @@ class NormalizationFactory:
                         normalization_layer = rgn(num_groups=numofgroups, num_channels=planes, eps=eps)
                     elif method == "SGN":
                         normalization_layer = sgn(num_groups=numofgroups, num_channels=planes, eps=eps,
-                                                  strategy=self.create_strategy(group_norm, planes),
+                                                  strategy=self.create_strategy(numofgroups, planes),
                                                   normalization_args=self.normalization_args)
                     else:
                         raise Exception("The normalization method not recognized")
