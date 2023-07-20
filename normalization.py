@@ -47,10 +47,7 @@ class NormalizationFactory:
         if isinstance(norm_layer, (BatchNorm2d, GroupNorm)):
             norm_layer.weight.data.fill_(1)
             norm_layer.bias.data.zero_()
-        elif isinstance(norm_layer, rgn):
-            norm_layer.groupNorm.weight.data.fill_(1)
-            norm_layer.groupNorm.bias.data.zero_()
-        elif isinstance(norm_layer, sgn):
+        elif isinstance(norm_layer, (sgn, rgn)):
             norm_layer.groupNorm.weight.data.fill_(1)
             norm_layer.groupNorm.bias.data.zero_()
         else:
@@ -60,7 +57,6 @@ class NormalizationFactory:
         return int(numofchannels / self.group_size)
 
     def create_norm2d(self, planes):
-        method = self.method
         normalization_layer_dict = {
             "BN": BatchNorm2d,
             "GN": GroupNorm,
@@ -68,25 +64,23 @@ class NormalizationFactory:
             "RGN": rgn
         }
 
-        if method not in normalization_layer_dict:
+        if self.method not in normalization_layer_dict:
             raise Exception("The normalization method not recognized")
 
-        if method == "BN":
-            normalization_layer = normalization_layer_dict[method](planes)
+        if self.method == "BN":
+            normalization_layer = normalization_layer_dict[self.method](planes)
         else:
-            group_norm = self.group_norm
-            eps = self.eps
-            num_groups = self.groupsBySize(planes) if self.group_by_size else group_norm
+            num_groups = self.groupsBySize(planes) if self.group_by_size else self.group_norm
 
             if self.group_by_size and self.group_size >= planes:
-                normalization_layer = LayerNorm(planes, eps=eps)
-            elif method == "GN":
-                normalization_layer = GroupNorm(num_groups, planes, eps=eps)
-            elif method == "SGN":
-                normalization_layer = normalization_layer_dict[method](
+                normalization_layer = LayerNorm(planes, eps=self.eps)
+            elif self.method == "GN":
+                normalization_layer = GroupNorm(num_groups, planes, eps=self.eps)
+            elif self.method == "SGN":
+                normalization_layer = normalization_layer_dict[self.method](
                     num_groups=num_groups, num_channels=planes,
                     strategy=self.create_strategy(num_groups, planes),
-                    version=self.version, eps=eps,
+                    version=self.version, eps=self.eps,
                     no_shuff_best_k_p=self.no_shuff_best_k_p,
                     shuff_thrs_std_only=self.shuff_thrs_std_only,
                     std_threshold_l=self.std_threshold_l,
@@ -94,8 +88,8 @@ class NormalizationFactory:
                     keep_best_group_num_start=self.keep_best_group_num_start
                 )
             else:
-                normalization_layer = normalization_layer_dict[method](
-                    num_groups=num_groups, num_channels=planes, eps=eps
+                normalization_layer = normalization_layer_dict[self.method](
+                    num_groups=num_groups, num_channels=planes, eps=self.eps
                 )
 
         # After you create the normalization_layer, initialize it
