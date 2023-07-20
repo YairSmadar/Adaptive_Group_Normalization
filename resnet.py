@@ -18,9 +18,9 @@ def resnet50(normalization_args: dict):
 class ResNet(nn.Module):
     def __init__(self, block, layers, normalization_args, num_classes=100, dropout_p=0.2):
         super(ResNet, self).__init__()
-        self.normalization_factory = NormalizationFactory(normalization_args)
-        self.method = normalization_args['method']
-        self.group_norm = normalization_args['group_norm']
+        self.normalization_factory = NormalizationFactory(normalization_args['version'],
+                                                          **normalization_args['norm_factory_args'],
+                                                          **normalization_args['SGN_args'])
         self.inplanes = 64
         self.normLayers = []
         self.batch_num = 0
@@ -62,20 +62,12 @@ class ResNet(nn.Module):
                 m.conv3.weight.data.normal_(0, math.sqrt(2. / n3))
 
                 try:
-                    if self.method == 'SGN' or self.method == 'RGN':
-                        m.norm1.groupNorm.weight.data.fill_(1)
-                        m.norm1.groupNorm.bias.data.zero_()
-                        m.norm2.groupNorm.weight.data.fill_(1)
-                        m.norm2.groupNorm.bias.data.zero_()
-                        m.norm3.groupNorm.weight.data.fill_(1)
-                        m.norm3.groupNorm.bias.data.zero_()
-                    else:
-                        m.norm1.weight.data.fill_(1)
-                        m.norm1.bias.data.zero_()
-                        m.norm2.weight.data.fill_(1)
-                        m.norm2.bias.data.zero_()
-                        m.norm3.weight.data.fill_(1)
-                        m.norm3.bias.data.zero_()
+                    m.norm1.groupNorm.weight.data.fill_(1)
+                    m.norm1.groupNorm.bias.data.zero_()
+                    m.norm2.groupNorm.weight.data.fill_(1)
+                    m.norm2.groupNorm.bias.data.zero_()
+                    m.norm3.groupNorm.weight.data.fill_(1)
+                    m.norm3.groupNorm.bias.data.zero_()
                 except:
                     m.norm1.weight.data.fill_(1)
                     m.norm1.bias.data.zero_()

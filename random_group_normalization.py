@@ -22,12 +22,6 @@ class RandomGroupNorm(Module):
             exit(1)
 
         self.normalization_args = normalization_args
-        self.samples_so_far = 0
-        self.batches_so_far = 0
-        self.epoch_num = 0
-        self.is_first_batch_in_epoch = True
-        self.next_is_first_batch = False
-
         self.need_to_recluster = False
 
     def forward(self, Conv_input):

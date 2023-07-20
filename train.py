@@ -50,22 +50,24 @@ def main():
 
     normalization_args = \
         {
-            "method": args.method,
             "version": args.SGN_version if args.method == 'SGN' else args.RGN_version,
-            "group_by_size": args.group_by_size,
-            "group_size": args.group_norm_size if args.group_by_size else args.group_norm,
-            "group_norm": args.group_norm,
-            "no_shuff_best_k_p": args.no_shuff_best_k_p,
-            "shuff_thrs_std_only": args.shuff_thrs_std_only,
-            "std_threshold_l": args.std_threshold_l,
-            "std_threshold_h": args.std_threshold_h,
-            "keep_best_group_num_start": args.keep_best_group_num_start,
-            "epoch_start_cluster": args.epoch_start_cluster,
-            "riar": args.riar,
-            "plot_groups": args.plot_groups,
-            "max_norm_shuffle": args.max_norm_shuffle,
-            "num_of_epch_to_shuffle": args.norm_shuffle,
-            "eps": args.eps
+            "norm_factory_args":
+                {
+                    "method": args.method,
+                    "group_by_size": args.group_by_size,
+                    "group_norm_size": args.group_norm_size,
+                    "group_norm": args.group_norm,
+                    "plot_groups": args.plot_groups,
+                },
+            "SGN_args":
+                {
+                    "eps": args.eps,
+                    "no_shuff_best_k_p": args.no_shuff_best_k_p,
+                    "shuff_thrs_std_only": args.shuff_thrs_std_only,
+                    "std_threshold_l": args.std_threshold_l,
+                    "std_threshold_h": args.std_threshold_h,
+                    "keep_best_group_num_start": args.keep_best_group_num_start
+                },
         }
 
     model = resnet50(normalization_args=normalization_args)
@@ -75,10 +77,10 @@ def main():
     criterion = CrossEntropyLoss().to(global_vars.device)
     optimizer = SGD(model.parameters(), args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
 
-    sgn_scheduler = AGNScheduler(model.module, normalization_args["epoch_start_cluster"],
-                                 normalization_args["num_of_epch_to_shuffle"],
-                                 normalization_args["riar"],
-                                 normalization_args["max_norm_shuffle"])
+    sgn_scheduler = AGNScheduler(model=model.module, epoch_start_cluster=args.epoch_start_cluster,
+                                 num_of_epch_to_shuffle=args.norm_shuffle,
+                                 riar=args.riar,
+                                 max_norm_shuffle=args.max_norm_shuffle)
 
     if args.resume:
         # optionally resume from a checkpoint
@@ -89,7 +91,7 @@ def main():
             print("=> no checkpoint found at '{}'".format(args.resume))
     else:
         # load & save the model initial weights 
-        if args.load != None:
+        if args.load is not None:
             print("loading weights from:", args.load)
             State_dict = load(args.load, map_location=torch.device(global_vars.device_name))['state_dict']
             with no_grad():

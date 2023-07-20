@@ -13,12 +13,10 @@ import matplotlib.pyplot as plt
 
 
 class SimilarityGroupNorm(Module):
-    def __init__(self, num_groups: int, num_channels: int = 32, eps=1e-12,
-                 strategy=None, normalization_args=None):
+    def __init__(self, num_groups: int, num_channels: int = 32, strategy=None,
+                 version: int = 14, eps=1e-12, no_shuff_best_k_p: float = 0.1, shuff_thrs_std_only: int = False,
+                 std_threshold_l: int = 0, std_threshold_h: int = 1, keep_best_group_num_start: int = 0):
         super(SimilarityGroupNorm, self).__init__()
-
-        if normalization_args is None:
-            raise Exception("SGN: Error! normalization_args in None!")
 
         self.groupNorm = GroupNorm(num_groups, num_channels, eps=eps,
                                    affine=True)
@@ -30,18 +28,22 @@ class SimilarityGroupNorm(Module):
         self.num_groups = num_groups
         self.num_channels = num_channels
         self.group_size = int(num_channels / num_groups)
-        if normalization_args["no_shuff_best_k_p"] != 1.0 and \
-                math.floor(self.num_groups * normalization_args["no_shuff_best_k_p"]) != 0:
+        self.shuff_thrs_std_only = shuff_thrs_std_only
+        self.no_shuff_best_k_p = no_shuff_best_k_p
+        self.std_threshold_l = std_threshold_l
+        self.std_threshold_h = std_threshold_h
+        self.keep_best_group_num_start = keep_best_group_num_start
+        self.version = version
+        if no_shuff_best_k_p != 1.0 and \
+                math.floor(self.num_groups * no_shuff_best_k_p) != 0:
             self.keep_best_std_groups = True
             self.filtered_num_groups = \
-                num_groups - math.floor(self.num_groups * normalization_args["no_shuff_best_k_p"])
+                num_groups - math.floor(self.num_groups * no_shuff_best_k_p)
         else:
             self.keep_best_std_groups = False
         self.eps = eps
         self.strategy = strategy
-        self.no_shuff_best_k_p = normalization_args["no_shuff_best_k_p"]
         self.recluster_num = 0
-        self.normalization_args = normalization_args
 
         # those flags are updated in the AGN scheduler
         self.need_to_recluster = False
@@ -102,20 +104,19 @@ class SimilarityGroupNorm(Module):
         N, C, H, W = channels_input.size()
         if self.strategy is not None:
 
-            if self.normalization_args["shuff_thrs_std_only"]:
+            if self.shuff_thrs_std_only:
                 channels_input_groups = channels_input.view(N, self.num_groups,
                                                             C // self.num_groups,
                                                             H, W)
 
                 stds = torch.std(channels_input_groups, dim=(0, 2, 3, 4))
 
-                if self.normalization_args["std_threshold_l"] <= torch.mean(stds) <= \
-                        self.normalization_args["std_threshold_h"]:
+                if self.std_threshold_l <= torch.mean(stds) <= self.std_threshold_h:
                     return
 
             should_keep_best_groups = \
                 self.keep_best_std_groups and \
-                self.normalization_args["keep_best_group_num_start"] >= self.recluster_num
+                self.keep_best_group_num_start >= self.recluster_num
 
             if should_keep_best_groups:
                 filtered_channels_input, best_std_channels_idx, N_best_groups = \
@@ -250,7 +251,7 @@ class SimilarityGroupNorm(Module):
 
         # in case the channels are shuffle the same for every image,
         # We used this from version 10 and above
-        if self.normalization_args["version"] >= 10:
+        if self.version >= 10:
             self.eval_indexes = channelsClustering
             self.eval_reverse_indexes = torch.argsort(self.eval_indexes).to(
                 channels_input.device)
@@ -266,12 +267,12 @@ class SimilarityGroupNorm(Module):
 
 
 class ClusteringStrategy(ABC):
-    def __init__(self, num_groups: int, num_channels: int = 32, normalization_args: dict = None):
+    def __init__(self, num_groups: int, num_channels: int = 32, plot_groups: bool = False):
         self.num_groups = num_groups
         self.num_channels = num_channels
         self.group_size = int(num_channels / num_groups)
         self.filtered_num_groups = num_groups
-        self.normalization_args = normalization_args
+        self._plot_groups = plot_groups
 
     @abstractmethod
     def sort_channels(self, channels_input):
@@ -458,7 +459,7 @@ class ClusteringStrategy(ABC):
         ret = self.create_shuff_for_total_batch(channels_input,
                                                 torch.from_numpy(new_order))
 
-        if self.normalization_args["plot_groups"]:
+        if self._plot_groups:
             channel_means = channels_input.mean(dim=(0, 2, 3))
             channel_vars = channels_input.var(dim=(0, 2, 3))
 
@@ -707,7 +708,7 @@ class SortChannelsV8(ClusteringStrategy):
         sort_metric = self.harmonic_mean(channels_input)
 
         channelsClustering = torch.argsort(sort_metric)
-        if self.normalization_args["plot_groups"]:
+        if self._plot_groups:
             N, C, H, W = channels_input.size()
             t = channels_input.reshape(N * C, H * W)
             channel_means = t.mean(dim=1)
@@ -747,7 +748,7 @@ class SortChannelsV10(ClusteringStrategy):
         channelsClustering = \
             (channelsClustering.reshape(N, C) + factors.unsqueeze(1)).view(-1)
 
-        if self.normalization_args["plot_groups"]:
+        if self._plot_groups:
             channel_means = channels_input.mean(dim=(0, 2, 3))
             channel_vars = channels_input.var(dim=(0, 2, 3))
 
@@ -798,7 +799,7 @@ class SortChannelsV12(ClusteringStrategy):
         ret = self.create_shuff_for_total_batch(channels_input,
                                                 torch.from_numpy(order))
 
-        if self.normalization_args["plot_groups"]:
+        if self._plot_groups:
             self.plot_groups(order, channel_means, channel_vars)
 
         return ret.to(channels_input.device)
@@ -816,7 +817,7 @@ class SortChannelsV13(ClusteringStrategy):
         ret = self.create_shuff_for_total_batch(channels_input,
                                                 torch.from_numpy(new_order))
 
-        if self.normalization_args["plot_groups"]:
+        if self._plot_groups:
             channel_means = channels_input.mean(dim=(0, 2, 3))
             channel_vars = channels_input.var(dim=(0, 2, 3))
 
