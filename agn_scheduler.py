@@ -41,3 +41,9 @@ class AGNScheduler:
 
         self.recluster = recluster_gap_pass and \
                             (self.max_norm_shuffle > self.epoch_num >= self.epoch_start_cluster)
+
+        if self.recluster:
+            print(f'recluster at epoch {self.epoch_num}!')
+
+        if self.use_gn:
+            print(f'use_gn at epoch {self.epoch_num}!')
