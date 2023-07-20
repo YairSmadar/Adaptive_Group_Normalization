@@ -35,7 +35,9 @@ class AGNScheduler:
             self.recluster = False
             return
 
-        epoch_clustring_loop = self.epoch_num % self.num_of_epch_to_shuffle
+        shifted_epoch = self.epoch_num - self.epoch_start_cluster
 
-        self.recluster = (epoch_clustring_loop < self.riar) and \
-                         (self.max_norm_shuffle > self.epoch_num >= self.epoch_start_cluster)
+        recluster_gap_pass = (shifted_epoch % self.num_of_epch_to_shuffle) in range(self.riar)
+
+        self.recluster = recluster_gap_pass and \
+                            (self.max_norm_shuffle > self.epoch_num >= self.epoch_start_cluster)
