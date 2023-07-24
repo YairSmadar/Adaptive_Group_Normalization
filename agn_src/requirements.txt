@@ -1,0 +1,8 @@
+# AGN requirements
+torch
+numpy
+scipy
+k-means-constrained
+ortools==9.3.10497
+matplotlib
+
