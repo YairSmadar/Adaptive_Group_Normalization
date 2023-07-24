@@ -1,0 +1,12 @@
+setuptools
+torch==1.10.0+cu111 torchvision==0.11.1+cu111 torchaudio==0.10.0+cu111 -f https://download.pytorch.org/whl/cu111/torch_stable.html
+wandb~=0.14.0
+numpy
+argparse
+pandas
+matplotlib
+ipython
+scipy
+k-means-constrained
+ortools==9.3.10497
+sklearn

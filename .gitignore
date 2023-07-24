@@ -110,6 +110,7 @@ ENV/
 env.bak/
 venv.bak/
 AGN_env/
+yolov5_venv/
 
 
 # Spyder project settings
@@ -131,7 +132,7 @@ dmypy.json
 .pyre/
 
 /.idea/
-/dataset/
+datasets/
 /wandb/
 /res/
 /RT_SED_venv/
