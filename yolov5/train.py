@@ -16,15 +16,18 @@ Tutorial:   https://docs.ultralytics.com/yolov5/tutorials/train_custom_data
 """
 
 import argparse
+import json
 import math
 import os
 import random
 import subprocess
 import sys
 import time
-from copy import deepcopy
+from copy import deepcopy, copy
 from datetime import datetime
 from pathlib import Path
+
+from agn_src.agn_scheduler import AGNScheduler
 
 try:
     import comet_ml  # must be imported before torch (if installed)
@@ -261,14 +264,41 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
     scaler = torch.cuda.amp.GradScaler(enabled=amp)
     stopper, stop = EarlyStopping(patience=opt.patience), False
     compute_loss = ComputeLoss(model)  # init loss class
+
+    sgn_scheduler = AGNScheduler(model=model, epoch_start_cluster=opt.epoch_start_cluster,
+                                 num_of_epch_to_shuffle=opt.num_of_epch_to_shuffle,
+                                 riar=opt.riar,
+                                 max_norm_shuffle=opt.max_norm_shuffle)
+
     callbacks.run('on_train_start')
     LOGGER.info(f'Image sizes {imgsz} train, {imgsz} val\n'
                 f'Using {train_loader.num_workers * WORLD_SIZE} dataloader workers\n'
                 f"Logging results to {colorstr('bold', save_dir)}\n"
                 f'Starting training for {epochs} epochs...')
+
+    # Save model
+    SAVE_INIT_WEIGHTS = False
+    if SAVE_INIT_WEIGHTS:  # if save
+        ckpt = {
+            'epoch': 0,
+            'best_fitness': best_fitness,
+            'model': deepcopy(de_parallel(model)).half(),
+            'ema': deepcopy(ema.ema).half(),
+            'updates': ema.updates,
+            'optimizer': optimizer.state_dict(),
+            'opt': vars(opt),
+            'git': GIT_INFO,  # {remote, branch, commit} if a git repo
+            'date': datetime.now().isoformat()}
+
+        # Save last, best and delete
+        torch.save(ckpt, 'init_weights/init_yolov5s_3.pt')
+
     for epoch in range(start_epoch, epochs):  # epoch ------------------------------------------------------------------
         callbacks.run('on_train_epoch_start')
+
         model.train()
+
+        sgn_scheduler.step()
 
         # Update image weights (optional, single-GPU only)
         if opt.image_weights:
@@ -441,12 +471,13 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
 
 def parse_opt(known=False):
     parser = argparse.ArgumentParser()
+    parser.add_argument('--config', type=str, required=True)
     parser.add_argument('--weights', type=str, default=ROOT / 'yolov5s.pt', help='initial weights path')
     parser.add_argument('--cfg', type=str, default='', help='model.yaml path')
     parser.add_argument('--data', type=str, default=ROOT / 'data/coco128.yaml', help='dataset.yaml path')
     parser.add_argument('--hyp', type=str, default=ROOT / 'data/hyps/hyp.scratch-low.yaml', help='hyperparameters path')
     parser.add_argument('--epochs', type=int, default=100, help='total training epochs')
-    parser.add_argument('--batch-size', type=int, default=16, help='total batch size for all GPUs, -1 for autobatch')
+    parser.add_argument('--batch_size', type=int, default=16, help='total batch size for all GPUs, -1 for autobatch')
     parser.add_argument('--imgsz', '--img', '--img-size', type=int, default=640, help='train, val image size (pixels)')
     parser.add_argument('--rect', action='store_true', help='rectangular training')
     parser.add_argument('--resume', nargs='?', const=True, default=False, help='resume most recent training')
@@ -642,6 +673,25 @@ def run(**kwargs):
     return opt
 
 
+def apply_config(args: argparse.Namespace, config_path: str):
+    """Overwrite the values in an arguments object by values of namesake
+    keys in a JSON config file.
+
+    :param args: The arguments object
+    :param config_path: the path to a config JSON file.
+    """
+    config_path = copy(config_path)
+    if config_path:
+        # Opening JSON file
+        f = open(config_path)
+        config_overwrite = json.load(f)
+        for k, v in config_overwrite.items():
+            if k.startswith('_'):
+                continue
+            setattr(args, k, v)
+
+
 if __name__ == '__main__':
     opt = parse_opt()
+    apply_config(opt, opt.config)
     main(opt)

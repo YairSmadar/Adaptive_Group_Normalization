@@ -16,7 +16,7 @@ from utils.loggers.wandb.wandb_utils import WandbLogger
 from utils.plots import plot_images, plot_labels, plot_results
 from utils.torch_utils import de_parallel
 
-LOGGERS = ('csv', 'tb', 'wandb', 'clearml', 'comet')  # *.csv, TensorBoard, Weights & Biases, ClearML
+LOGGERS = ['wandb']  # *.csv, TensorBoard, Weights & Biases, ClearML
 RANK = int(os.getenv('RANK', -1))
 
 try:
@@ -229,13 +229,13 @@ class Loggers():
             with open(file, 'a') as f:
                 f.write(s + ('%20.5g,' * n % tuple([epoch] + vals)).rstrip(',') + '\n')
 
-        if self.tb:
-            for k, v in x.items():
-                self.tb.add_scalar(k, v, epoch)
-        elif self.clearml:  # log to ClearML if TensorBoard not used
-            for k, v in x.items():
-                title, series = k.split('/')
-                self.clearml.task.get_logger().report_scalar(title, series, v, epoch)
+        # if self.tb:
+        #     for k, v in x.items():
+        #         self.tb.add_scalar(k, v, epoch)
+        # elif self.clearml:  # log to ClearML if TensorBoard not used
+        #     for k, v in x.items():
+        #         title, series = k.split('/')
+        #         self.clearml.task.get_logger().report_scalar(title, series, v, epoch)
 
         if self.wandb:
             if best_fitness == fi:
@@ -273,9 +273,9 @@ class Loggers():
         files = [(self.save_dir / f) for f in files if (self.save_dir / f).exists()]  # filter
         self.logger.info(f"Results saved to {colorstr('bold', self.save_dir)}")
 
-        if self.tb and not self.clearml:  # These images are already captured by ClearML by now, we don't want doubles
-            for f in files:
-                self.tb.add_image(f.stem, cv2.imread(str(f))[..., ::-1], epoch, dataformats='HWC')
+        # if self.tb and not self.clearml:  # These images are already captured by ClearML by now, we don't want doubles
+        #     for f in files:
+        #         self.tb.add_image(f.stem, cv2.imread(str(f))[..., ::-1], epoch, dataformats='HWC')
 
         if self.wandb:
             self.wandb.log(dict(zip(self.keys[3:10], results)))
@@ -343,9 +343,9 @@ class GenericLogger:
             with open(self.csv, 'a') as f:
                 f.write(s + ('%23.5g,' * n % tuple([epoch] + vals)).rstrip(',') + '\n')
 
-        if self.tb:
-            for k, v in metrics.items():
-                self.tb.add_scalar(k, v, epoch)
+        # if self.tb:
+        #     for k, v in metrics.items():
+        #         self.tb.add_scalar(k, v, epoch)
 
         if self.wandb:
             self.wandb.log(metrics, step=epoch)
@@ -355,17 +355,18 @@ class GenericLogger:
         files = [Path(f) for f in (files if isinstance(files, (tuple, list)) else [files])]  # to Path
         files = [f for f in files if f.exists()]  # filter by exists
 
-        if self.tb:
-            for f in files:
-                self.tb.add_image(f.stem, cv2.imread(str(f))[..., ::-1], epoch, dataformats='HWC')
+        # if self.tb:
+        #     for f in files:
+        #         self.tb.add_image(f.stem, cv2.imread(str(f))[..., ::-1], epoch, dataformats='HWC')
 
         if self.wandb:
             self.wandb.log({name: [wandb.Image(str(f), caption=f.name) for f in files]}, step=epoch)
 
     def log_graph(self, model, imgsz=(640, 640)):
         # Log model graph to all loggers
-        if self.tb:
-            log_tensorboard_graph(self.tb, model, imgsz)
+        # if self.tb:
+        #     log_tensorboard_graph(self.tb, model, imgsz)
+        pass
 
     def log_model(self, model_path, epoch=0, metadata={}):
         # Log model to all loggers
