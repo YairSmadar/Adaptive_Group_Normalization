@@ -18,10 +18,15 @@ class AGNScheduler:
 
     def step(self):
         self.update_recluster()
-        for module in self.model.modules():
-            if isinstance(module, (SimilarityGroupNorm, RandomGroupNorm)):
-                module.need_to_recluster = self.recluster
-                module.use_gn = self.use_gn
+        self.update_module(self.model, self.recluster, self.use_gn)
+
+    def update_module(self, module, recluster, use_gn):
+        if isinstance(module, (SimilarityGroupNorm, RandomGroupNorm)):
+            module.need_to_recluster = recluster
+            module.use_gn = use_gn
+        elif isinstance(module, nn.Module):  # any PyTorch Module
+            for child_module in module.children():
+                self.update_module(child_module, recluster, use_gn)  # Recursion
 
     def update_recluster(self):
 

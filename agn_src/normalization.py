@@ -44,7 +44,7 @@ class NormalizationFactory:
                               plot_groups=self.plot_groups)
 
     def init_norm_layer(self, norm_layer):
-        if isinstance(norm_layer, (BatchNorm2d, GroupNorm)):
+        if isinstance(norm_layer, (BatchNorm2d, GroupNorm, LayerNorm)):
             norm_layer.weight.data.fill_(1)
             norm_layer.bias.data.zero_()
         elif isinstance(norm_layer, (sgn, rgn)):
@@ -72,7 +72,7 @@ class NormalizationFactory:
         else:
             num_groups = self.groupsBySize(planes) if self.group_by_size else self.group_norm
 
-            if self.group_by_size and self.group_size >= planes:
+            if False: #self.group_by_size and self.group_size >= planes:
                 normalization_layer = LayerNorm(planes, eps=self.eps)
             elif self.method == "GN":
                 normalization_layer = GroupNorm(num_groups, planes, eps=self.eps)

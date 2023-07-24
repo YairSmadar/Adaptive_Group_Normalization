@@ -5,4 +5,5 @@ scipy
 k-means-constrained
 ortools==9.3.10497
 matplotlib
+scikit-learn
 
