@@ -24,5 +24,6 @@
   "seed": 0,
   "epochs": 100,
   "batch_size": 16,
-  "weights": "init_weights\\W1.pt"
+  "weights": "init_weights/init_yolov5s_1.pt",
+  "noplots": true
 }
