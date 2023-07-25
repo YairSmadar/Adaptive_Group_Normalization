@@ -27,6 +27,10 @@ from copy import deepcopy, copy
 from datetime import datetime
 from pathlib import Path
 
+# Add the project's root directory to sys.path
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.append(project_root)
+
 from agn_src.agn_scheduler import AGNScheduler
 
 try:
