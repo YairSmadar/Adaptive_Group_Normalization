@@ -21,7 +21,7 @@
   "shuff_thrs_std_only": false,
   "std_threshold_l": 1,
   "std_threshold_h": 4,
-  "scheduler_name": "lineardecay",
+  "scheduler_name": "default",
   "classes_to_train":
   [
     "all"
