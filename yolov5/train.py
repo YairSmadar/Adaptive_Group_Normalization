@@ -135,7 +135,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
             opt.resume, opt.noval, opt.nosave, opt.workers, opt.freeze
     callbacks.run('on_pretrain_routine_start')
 
-    if wandb:
+    if wandb and opt.use_wandb:
         wandb.init(project="Adaptive_Normalization",
                    entity="the-smadars",
                    name=generate_wandb_name(opt),
@@ -494,7 +494,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                 del ckpt
                 callbacks.run('on_model_save', last, epoch, final_epoch, best_fitness, fi)
 
-        if wandb:
+        if wandb and opt.use_wandb:
             precision, recall, f1, ap, ap50 = results_for_wandb
             wandb.log({"test precision": precision,
                        "train recall": recall,
