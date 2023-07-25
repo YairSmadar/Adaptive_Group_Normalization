@@ -69,17 +69,82 @@ from utils.plots import plot_evolve
 from utils.torch_utils import (EarlyStopping, ModelEMA, de_parallel, select_device, smart_DDP, smart_optimizer,
                                smart_resume, torch_distributed_zero_first)
 
+try:
+    import wandb
+
+    assert hasattr(wandb, '__version__')  # verify package import not local dir
+except (ImportError, AssertionError):
+    wandb = None
+
 LOCAL_RANK = int(os.getenv('LOCAL_RANK', -1))  # https://pytorch.org/docs/stable/elastic/run.html
 RANK = int(os.getenv('RANK', -1))
 WORLD_SIZE = int(os.getenv('WORLD_SIZE', 1))
 GIT_INFO = check_git_info()
 
 
+def generate_wandb_name(args):
+    model_name = args.cfg.split('/')[1].split('.')[0]
+    wanda_test_name = model_name
+
+    data = args.data.split('/')[1].split('.')[0]
+    wanda_test_name += f"_{data}"
+
+    wanda_test_name += f"_{args.method}"
+
+    if args.method in {'SGN', 'RGN'}:
+        wanda_test_name += f'_V{args.AGN_version}'
+
+        if args.epoch_start_cluster != 0:
+            wanda_test_name += f'_epoch-start-cluster-{args.epoch_start_cluster}'
+
+        wanda_test_name += f'_shuff-every-ep-{args.num_of_epch_to_shuffle}'
+
+        if args.max_norm_shuffle != 1000:
+            wanda_test_name += f'_max-shuff-{args.max_norm_shuffle}'
+
+        if args.no_shuff_best_k_p != 1.0:
+            wanda_test_name += f'_ns-{args.no_shuff_best_k_p}'
+
+        if args.shuff_thrs_std_only:
+            if args.std_threshold_l != -1:
+                # sto = shuffle threshold only
+                wanda_test_name += f'_sto-{args.std_threshold_l}-{args.std_threshold_h}'
+            else:
+                wanda_test_name += f'_sto-{args.std_threshold_h}'
+
+    wanda_test_name += f'_bs-{args.batch_size}'
+
+    if args.group_by_size:
+        wanda_test_name += f'_gs-{args.group_norm_size}'
+    else:
+        wanda_test_name += f'_num-of-groups-{args.group_norm}'
+
+    if args.weights:
+        w = os.path.splitext(os.path.basename(args.weights))[0]
+        if 'init' in w:
+            w = w.replace('init_', 'W-')
+        else:
+            w = 'W-' + w
+        wanda_test_name += f'_{w}'
+
+    return wanda_test_name
+
 def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictionary
     save_dir, epochs, batch_size, weights, single_cls, evolve, data, cfg, resume, noval, nosave, workers, freeze = \
         Path(opt.save_dir), opt.epochs, opt.batch_size, opt.weights, opt.single_cls, opt.evolve, opt.data, opt.cfg, \
-        opt.resume, opt.noval, opt.nosave, opt.workers, opt.freeze
+            opt.resume, opt.noval, opt.nosave, opt.workers, opt.freeze
     callbacks.run('on_pretrain_routine_start')
+
+    if wandb:
+        wandb.init(project="Adaptive_Normalization",
+                   entity="the-smadars",
+                   name=generate_wandb_name(opt),
+                   config=opt)
+        wandb.run.summary["best_precision"] = 0
+        wandb.run.summary["best_recall"] = 0
+        wandb.run.summary["best_f1"] = 0
+        wandb.run.summary["best_mAP@0.5:0.95"] = 0
+        wandb.run.summary["best_mAP@0.5"] = 0
 
     # Directories
     w = save_dir / 'weights'  # weights dir
@@ -380,23 +445,24 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
         lr = [x['lr'] for x in optimizer.param_groups]  # for loggers
         scheduler.step()
 
+        results_for_wandb = []
         if RANK in {-1, 0}:
             # mAP
             callbacks.run('on_train_epoch_end', epoch=epoch)
             ema.update_attr(model, include=['yaml', 'nc', 'hyp', 'names', 'stride', 'class_weights'])
             final_epoch = (epoch + 1 == epochs) or stopper.possible_stop
             if not noval or final_epoch:  # Calculate mAP
-                results, maps, _ = validate.run(data_dict,
-                                                batch_size=batch_size // WORLD_SIZE * 2,
-                                                imgsz=imgsz,
-                                                half=amp,
-                                                model=ema.ema,
-                                                single_cls=single_cls,
-                                                dataloader=val_loader,
-                                                save_dir=save_dir,
-                                                plots=False,
-                                                callbacks=callbacks,
-                                                compute_loss=compute_loss)
+                results, maps, _, results_for_wandb = validate.run(data_dict,
+                                                                   batch_size=batch_size // WORLD_SIZE * 2,
+                                                                   imgsz=imgsz,
+                                                                   half=amp,
+                                                                   model=ema.ema,
+                                                                   single_cls=single_cls,
+                                                                   dataloader=val_loader,
+                                                                   save_dir=save_dir,
+                                                                   plots=False,
+                                                                   callbacks=callbacks,
+                                                                   compute_loss=compute_loss)
 
             # Update best mAP
             fi = fitness(np.array(results).reshape(1, -1))  # weighted combination of [P, R, mAP@.5, mAP@.5-.95]
@@ -427,6 +493,35 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                     torch.save(ckpt, w / f'epoch{epoch}.pt')
                 del ckpt
                 callbacks.run('on_model_save', last, epoch, final_epoch, best_fitness, fi)
+
+        if wandb:
+            precision, recall, f1, ap, ap50 = results_for_wandb
+            wandb.log({"test precision": precision,
+                       "train recall": recall,
+                       "test f1": f1,
+                       "mAP@0.5:0.95": ap,
+                       "mAP@0.5": ap50,
+                       })
+
+            wandb.run.summary["best_precision"] = \
+                precision if precision >= wandb.run.summary["best_precision"] \
+                    else wandb.run.summary["best_precision"]
+
+            wandb.run.summary["best_recall"] = \
+                recall if recall >= wandb.run.summary["best_recall"] \
+                    else wandb.run.summary["best_recall"]
+
+            wandb.run.summary["best_f1"] = \
+                f1 if f1 >= wandb.run.summary["best_f1"] \
+                    else wandb.run.summary["best_f1"]
+
+            wandb.run.summary["best_mAP@0.5:0.95"] = \
+                ap if ap >= wandb.run.summary["best_mAP@0.5:0.95"] \
+                    else wandb.run.summary["best_mAP@0.5:0.95"]
+
+            wandb.run.summary["best_mAP@0.5"] = \
+                ap50 if ap50 >= wandb.run.summary["best_mAP@0.5"] \
+                    else wandb.run.summary["best_mAP@0.5"]
 
         # EarlyStopping
         if RANK != -1:  # if DDP training

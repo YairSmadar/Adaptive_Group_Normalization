@@ -137,3 +137,5 @@ datasets/
 /res/
 /RT_SED_venv/
 ResNet50/dataset/
+ResNet50/res/
+
