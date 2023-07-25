@@ -142,9 +142,9 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                    config=opt)
         wandb.run.summary["best_precision"] = 0
         wandb.run.summary["best_recall"] = 0
-        wandb.run.summary["best_f1"] = 0
         wandb.run.summary["best_mAP@0.5:0.95"] = 0
         wandb.run.summary["best_mAP@0.5"] = 0
+        wandb.run.summary["best_total"] = 0
 
     # Directories
     w = save_dir / 'weights'  # weights dir
@@ -445,14 +445,13 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
         lr = [x['lr'] for x in optimizer.param_groups]  # for loggers
         scheduler.step()
 
-        results_for_wandb = ()
         if RANK in {-1, 0}:
             # mAP
             callbacks.run('on_train_epoch_end', epoch=epoch)
             ema.update_attr(model, include=['yaml', 'nc', 'hyp', 'names', 'stride', 'class_weights'])
             final_epoch = (epoch + 1 == epochs) or stopper.possible_stop
             if not noval or final_epoch:  # Calculate mAP
-                results, maps, _, results_for_wandb = validate.run(data_dict,
+                results, maps, _ = validate.run(data_dict,
                                                                    batch_size=batch_size // WORLD_SIZE * 2,
                                                                    imgsz=imgsz,
                                                                    half=amp,
@@ -495,7 +494,11 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                 callbacks.run('on_model_save', last, epoch, final_epoch, best_fitness, fi)
 
         if wandb and opt.use_wandb:
-            precision, recall, f1, ap, ap50 = results_for_wandb
+            precision, recall, ap, ap50 = results
+            f1 = 2 * (precision * recall) / (precision + recall)
+
+            best_total = fitness(np.array(results).reshape(1, -1))  # weighted combination of [P, R, mAP@.5, mAP@.5-.95]
+
             wandb.log({"test precision": precision,
                        "train recall": recall,
                        "test f1": f1,
@@ -511,10 +514,6 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                 recall if recall >= wandb.run.summary["best_recall"] \
                     else wandb.run.summary["best_recall"]
 
-            wandb.run.summary["best_f1"] = \
-                f1 if f1 >= wandb.run.summary["best_f1"] \
-                    else wandb.run.summary["best_f1"]
-
             wandb.run.summary["best_mAP@0.5:0.95"] = \
                 ap if ap >= wandb.run.summary["best_mAP@0.5:0.95"] \
                     else wandb.run.summary["best_mAP@0.5:0.95"]
@@ -522,6 +521,10 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
             wandb.run.summary["best_mAP@0.5"] = \
                 ap50 if ap50 >= wandb.run.summary["best_mAP@0.5"] \
                     else wandb.run.summary["best_mAP@0.5"]
+
+            wandb.run.summary["best_total"] = \
+                best_total if best_total >= wandb.run.summary["best_total"] \
+                    else wandb.run.summary["best_total"]
 
         # EarlyStopping
         if RANK != -1:  # if DDP training
