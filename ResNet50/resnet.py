@@ -1,7 +1,13 @@
 import math
 import torch.nn as nn
-
+import os
+import sys
 import global_vars
+
+# Add the project's root directory to sys.path
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.append(project_root)
+
 from agn_src.normalization import NormalizationFactory
 from agn_src.random_group_normalization import RandomGroupNorm as rgn
 from agn_src.similarity_group_normalization import SimilarityGroupNorm as sgn
