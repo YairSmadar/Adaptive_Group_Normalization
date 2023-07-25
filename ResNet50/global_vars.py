@@ -258,7 +258,7 @@ def printParameters():
 
 
 def init_saveing_path():
-    if not os.path.exists:
+    if not os.path.exists(args.saveing_path):
         os.makedirs(args.saveing_path)
     if (args.saveing_path == None):
         args.saveing_path = "//content"
