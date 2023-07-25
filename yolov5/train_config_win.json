@@ -21,7 +21,7 @@
   "data": "data/coco128.yaml",
   "cfg": "models/yolov5s.yaml",
   "use_wandb": true,
-  "seed": 2,
+  "seed": 0,
   "epochs": 100,
   "batch_size": 16,
   "weights": "init_weights/init_yolov5s_1.pt",
