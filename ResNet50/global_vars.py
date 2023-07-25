@@ -1,4 +1,5 @@
 import logging
+import sys
 
 from torch import device, Generator, save, load
 from torch.cuda import is_available
@@ -257,6 +258,8 @@ def printParameters():
 
 
 def init_saveing_path():
+    if not os.path.exists:
+        os.makedirs(args.saveing_path)
     if (args.saveing_path == None):
         args.saveing_path = "//content"
     args.saveing_path = args.saveing_path + '//{}'.format(args.arch)
