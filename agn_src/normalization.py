@@ -1,7 +1,7 @@
 from torch.nn import BatchNorm2d, GroupNorm, LayerNorm
-from random_group_normalization import RandomGroupNorm as rgn
-from similarity_group_normalization import SimilarityGroupNorm as sgn
-import similarity_group_normalization
+from agn_src.random_group_normalization import RandomGroupNorm as rgn
+from agn_src.similarity_group_normalization import SimilarityGroupNorm as sgn
+import agn_src.similarity_group_normalization as similarity_group_normalization
 
 
 class NormalizationFactory:

@@ -1,5 +1,5 @@
-from similarity_group_normalization import SimilarityGroupNorm
-from random_group_normalization import RandomGroupNorm
+from agn_src.similarity_group_normalization import SimilarityGroupNorm
+from agn_src.random_group_normalization import RandomGroupNorm
 import torch.nn as nn
 
 

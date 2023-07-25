@@ -136,3 +136,4 @@ datasets/
 /wandb/
 /res/
 /RT_SED_venv/
+ResNet50/dataset/
