@@ -498,7 +498,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                 callbacks.run('on_model_save', last, epoch, final_epoch, best_fitness, fi)
 
         if wandb and opt.use_wandb:
-            precision, recall, ap, ap50 = results
+            precision, recall, ap, ap50, _ = results
             f1 = 2 * (precision * recall) / (precision + recall)
 
             best_total = fitness(np.array(results).reshape(1, -1))  # weighted combination of [P, R, mAP@.5, mAP@.5-.95]
