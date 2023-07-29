@@ -21,12 +21,12 @@ if str(ROOT) not in sys.path:
 if platform.system() != 'Windows':
     ROOT = Path(os.path.relpath(ROOT, Path.cwd()))  # relative
 
-from models.common import *  # noqa
-from models.experimental import *  # noqa
-from utils.autoanchor import check_anchor_order
-from utils.general import LOGGER, check_version, check_yaml, make_divisible, print_args
-from utils.plots import feature_visualization
-from utils.torch_utils import (fuse_conv_and_bn, initialize_weights, model_info, profile, scale_img, select_device,
+from yolov5.models.common import *  # noqa
+from yolov5.models.experimental import *  # noqa
+from yolov5.utils.autoanchor import check_anchor_order
+from yolov5.utils.general import LOGGER, check_version, check_yaml, make_divisible, print_args
+from yolov5.utils.plots import feature_visualization
+from yolov5.utils.torch_utils import (fuse_conv_and_bn, initialize_weights, model_info, profile, scale_img, select_device,
                                time_sync)
 from agn_src.normalization import NormalizationFactory
 
@@ -165,7 +165,8 @@ class BaseModel(nn.Module):
 
 class DetectionModel(BaseModel):
     # YOLOv5 detection model
-    def __init__(self, cfg='yolov5s.yaml', ch=3, nc=None, anchors=None):  # model, input channels, number of classes
+    def __init__(self, cfg='yolov5s.yaml', ch=3, nc=None, anchors=None,
+                 normalization_args=None):  # model, input channels, number of classes
         super().__init__()
         if isinstance(cfg, dict):
             self.yaml = cfg  # model dict
@@ -183,7 +184,8 @@ class DetectionModel(BaseModel):
         if anchors:
             LOGGER.info(f'Overriding model.yaml anchors with anchors={anchors}')
             self.yaml['anchors'] = round(anchors)  # override yaml value
-        self.model, self.save = parse_model(deepcopy(self.yaml), ch=[ch])  # model, savelist
+        self.model, self.save = parse_model(deepcopy(self.yaml), ch=[ch],
+                                            normalization_args=normalization_args)  # model, savelist
         self.names = [str(i) for i in range(self.yaml['nc'])]  # default names
         self.inplace = self.yaml.get('inplace', True)
 
@@ -297,7 +299,7 @@ class ClassificationModel(BaseModel):
         self.model = None
 
 
-def parse_model(d, ch):  # model_dict, input_channels(3)
+def parse_model(d, ch, normalization_args=None):  # model_dict, input_channels(3)
     # Parse a YOLOv5 model.yaml dictionary
     LOGGER.info(f"\n{'':>3}{'from':>18}{'n':>3}{'params':>10}  {'module':<40}{'arguments':<30}")
     anchors, nc, gd, gw, act = d['anchors'], d['nc'], d['depth_multiple'], d['width_multiple'], d.get('activation')
@@ -307,7 +309,10 @@ def parse_model(d, ch):  # model_dict, input_channels(3)
     na = (len(anchors[0]) // 2) if isinstance(anchors, list) else anchors  # number of anchors
     no = na * (nc + 5)  # number of outputs = anchors * (classes + 5)
 
-    normalization_factory = NormalizationFactory()
+    if normalization_args:
+        normalization_factory = NormalizationFactory(normalization_args['version'],
+                                                     **normalization_args['norm_factory_args'],
+                                                     **normalization_args['SGN_args'])
 
     layers, save, c2 = [], [], ch[-1]  # layers, savelist, ch out
     for i, (f, n, m, args) in enumerate(d['backbone'] + d['head']):  # from, number, module, args

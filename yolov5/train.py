@@ -192,6 +192,28 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
     names = {0: 'item'} if single_cls and len(data_dict['names']) != 1 else data_dict['names']  # class names
     is_coco = isinstance(val_path, str) and val_path.endswith('coco/val2017.txt')  # COCO dataset
 
+    normalization_args = \
+        {
+            "version": opt.AGN_version,
+            "norm_factory_args":
+                {
+                    "method": opt.method,
+                    "group_by_size": opt.group_by_size,
+                    "group_norm_size": opt.group_norm_size,
+                    "group_norm": opt.group_norm,
+                    "plot_groups": opt.plot_groups,
+                },
+            "SGN_args":
+                {
+                    "eps": opt.eps,
+                    "no_shuff_best_k_p": opt.no_shuff_best_k_p,
+                    "shuff_thrs_std_only": opt.shuff_thrs_std_only,
+                    "std_threshold_l": opt.std_threshold_l,
+                    "std_threshold_h": opt.std_threshold_h,
+                    "keep_best_group_num_start": opt.keep_best_group_num_start,
+                },
+        }
+
     # Model
     check_suffix(weights, '.pt')  # check weights
     pretrained = weights.endswith('.pt')
@@ -199,14 +221,16 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
         with torch_distributed_zero_first(LOCAL_RANK):
             weights = attempt_download(weights)  # download if not found locally
         ckpt = torch.load(weights, map_location='cpu')  # load checkpoint to CPU to avoid CUDA memory leak
-        model = Model(cfg or ckpt['model'].yaml, ch=3, nc=nc, anchors=hyp.get('anchors')).to(device)  # create
+        model = Model(cfg or ckpt['model'].yaml, ch=3, nc=nc, anchors=hyp.get('anchors'),
+                      normalization_args=normalization_args).to(device)  # create
         exclude = ['anchor'] if (cfg or hyp.get('anchors')) and not resume else []  # exclude keys
         csd = ckpt['model'].float().state_dict()  # checkpoint state_dict as FP32
         csd = intersect_dicts(csd, model.state_dict(), exclude=exclude)  # intersect
         model.load_state_dict(csd, strict=False)  # load
         LOGGER.info(f'Transferred {len(csd)}/{len(model.state_dict())} items from {weights}')  # report
     else:
-        model = Model(cfg, ch=3, nc=nc, anchors=hyp.get('anchors')).to(device)  # create
+        model = Model(cfg, ch=3, nc=nc, anchors=hyp.get('anchors'),
+                      normalization_args=normalization_args).to(device)  # create
     amp = check_amp(model)  # check AMP
 
     # Freeze
