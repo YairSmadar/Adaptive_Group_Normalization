@@ -14,8 +14,10 @@ import matplotlib.pyplot as plt
 
 class SimilarityGroupNorm(Module):
     def __init__(self, num_groups: int, num_channels: int = 32, strategy=None,
-                 version: int = 14, eps=1e-12, no_shuff_best_k_p: float = 0.1, shuff_thrs_std_only: int = False,
-                 std_threshold_l: int = 0, std_threshold_h: int = 1, keep_best_group_num_start: int = 0):
+                 version: int = 14, eps=1e-12, no_shuff_best_k_p: float = 0.1,
+                 shuff_thrs_std_only: int = False,
+                 std_threshold_l: int = 0, std_threshold_h: int = 1,
+                 keep_best_group_num_start: int = 0):
         super(SimilarityGroupNorm, self).__init__()
 
         self.groupNorm = GroupNorm(num_groups, num_channels, eps=eps,
@@ -49,7 +51,7 @@ class SimilarityGroupNorm(Module):
         self.need_to_recluster = False
         self.use_gn = False
 
-    def forward(self, Conv_input):
+    def forward(self, Conv_input: torch.Tensor):
 
         # start shuffle at epoch > 0
         if self.use_gn:
@@ -72,18 +74,46 @@ class SimilarityGroupNorm(Module):
             indexes = self.eval_indexes
             reverse_indexes = self.eval_reverse_indexes
 
-        Conv_input_reshaped = Conv_input.view(-1, W * H)
+        if N * C != indexes.size()[0]:
+            assert self.version >= 10, \
+                "N*C*H*W != indexes.size() is support in version >= 10 only."
 
-        # Use torch.index_select for better performance
-        Conv_input_new_idx = torch.index_select(Conv_input_reshaped, 0,
-                                                indexes)
+            Conv_input_reshaped = Conv_input.view(N, C, W * H)
+
+            single_img_indexes = indexes[:C]
+            Conv_input_new_idx = torch.zeros_like(Conv_input_reshaped). \
+                to(device=Conv_input.device)
+
+            for b in range(N):
+                Conv_input_new_idx[b] = \
+                    Conv_input_reshaped[b, single_img_indexes]
+        else:
+            Conv_input_reshaped = Conv_input.view(-1, W * H)
+
+            # Use torch.index_select for better performance
+            Conv_input_new_idx = torch.index_select(Conv_input_reshaped, 0,
+                                                    indexes)
+
         GN_input = Conv_input_new_idx.view(N, C, H, W)
         Conv_input_new_idx_norm = self.groupNorm(GN_input)
-        Conv_input_new_idx_norm = Conv_input_new_idx_norm.view(-1, W * H)
 
-        # Use torch.index_select for better performance
-        Conv_input_orig_idx_norm = torch.index_select(Conv_input_new_idx_norm,
-                                                      0, reverse_indexes)
+        if N * C != indexes.size()[0]:
+            Conv_input_new_idx_norm = Conv_input_new_idx_norm.view(-1, C, W * H)
+
+            single_img_reverse_indexes = reverse_indexes[:C]
+            Conv_input_orig_idx_norm = \
+                torch.zeros_like(Conv_input_new_idx_norm).to(device=
+                                                             Conv_input.device)
+
+            for b in range(N):
+                Conv_input_orig_idx_norm[b] = \
+                    Conv_input_new_idx_norm[b, single_img_reverse_indexes]
+        else:
+            Conv_input_new_idx_norm = Conv_input_new_idx_norm.view(-1, W * H)
+            # Use torch.index_select for better performance
+            Conv_input_orig_idx_norm = torch.index_select(
+                Conv_input_new_idx_norm,
+                0, reverse_indexes)
 
         ret = Conv_input_orig_idx_norm.view(N, C, H, W).requires_grad_(
             requires_grad=True)
@@ -111,7 +141,8 @@ class SimilarityGroupNorm(Module):
 
                 stds = torch.std(channels_input_groups, dim=(0, 2, 3, 4))
 
-                if self.std_threshold_l <= torch.mean(stds) <= self.std_threshold_h:
+                if self.std_threshold_l <= torch.mean(
+                        stds) <= self.std_threshold_h:
                     return
 
             should_keep_best_groups = \
@@ -153,7 +184,8 @@ class SimilarityGroupNorm(Module):
             # fake mask for get the correct indexes of the new clusters
             old_best_std_indexes = self.indexes[~mask]
 
-            fake_mask = torch.ones(self.num_groups * N * C, dtype=torch.bool).to(
+            fake_mask = torch.ones(self.num_groups * N * C,
+                                   dtype=torch.bool).to(
                 channels_input.device)
 
             for idx in old_best_std_indexes:
@@ -267,7 +299,8 @@ class SimilarityGroupNorm(Module):
 
 
 class ClusteringStrategy(ABC):
-    def __init__(self, num_groups: int, num_channels: int = 32, plot_groups: bool = False):
+    def __init__(self, num_groups: int, num_channels: int = 32,
+                 plot_groups: bool = False):
         self.num_groups = num_groups
         self.num_channels = num_channels
         self.group_size = int(num_channels / num_groups)
