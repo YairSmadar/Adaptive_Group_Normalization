@@ -74,46 +74,21 @@ class SimilarityGroupNorm(Module):
             indexes = self.eval_indexes
             reverse_indexes = self.eval_reverse_indexes
 
-        if N * C != indexes.size()[0]:
-            assert self.version >= 10, \
-                "N*C*H*W != indexes.size() is support in version >= 10 only."
+        Conv_input_reshaped = Conv_input.view(-1, W * H)
 
-            Conv_input_reshaped = Conv_input.view(N, C, W * H)
-
-            single_img_indexes = indexes[:C]
-            Conv_input_new_idx = torch.zeros_like(Conv_input_reshaped). \
-                to(device=Conv_input.device)
-
-            for b in range(N):
-                Conv_input_new_idx[b] = \
-                    Conv_input_reshaped[b, single_img_indexes]
-        else:
-            Conv_input_reshaped = Conv_input.view(-1, W * H)
-
-            # Use torch.index_select for better performance
-            Conv_input_new_idx = torch.index_select(Conv_input_reshaped, 0,
-                                                    indexes)
+        # Use torch.index_select for better performance
+        Conv_input_new_idx = torch.index_select(Conv_input_reshaped, 0,
+                                                indexes[:N*C])
 
         GN_input = Conv_input_new_idx.view(N, C, H, W)
         Conv_input_new_idx_norm = self.groupNorm(GN_input)
 
-        if N * C != indexes.size()[0]:
-            Conv_input_new_idx_norm = Conv_input_new_idx_norm.view(-1, C, W * H)
+        Conv_input_new_idx_norm = Conv_input_new_idx_norm.view(-1, W * H)
 
-            single_img_reverse_indexes = reverse_indexes[:C]
-            Conv_input_orig_idx_norm = \
-                torch.zeros_like(Conv_input_new_idx_norm).to(device=
-                                                             Conv_input.device)
-
-            for b in range(N):
-                Conv_input_orig_idx_norm[b] = \
-                    Conv_input_new_idx_norm[b, single_img_reverse_indexes]
-        else:
-            Conv_input_new_idx_norm = Conv_input_new_idx_norm.view(-1, W * H)
-            # Use torch.index_select for better performance
-            Conv_input_orig_idx_norm = torch.index_select(
-                Conv_input_new_idx_norm,
-                0, reverse_indexes)
+        # Use torch.index_select for better performance
+        Conv_input_orig_idx_norm = torch.index_select(
+            Conv_input_new_idx_norm,
+            0, reverse_indexes[:N*C])
 
         ret = Conv_input_orig_idx_norm.view(N, C, H, W).requires_grad_(
             requires_grad=True)
