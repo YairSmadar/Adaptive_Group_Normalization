@@ -10,6 +10,7 @@ from sklearn.ensemble import IsolationForest
 from scipy.stats import zscore
 from abc import ABC, abstractmethod
 import matplotlib.pyplot as plt
+from agn_src.VariableGroupNorm import VariableGroupNorm
 
 
 class SimilarityGroupNorm(Module):
@@ -17,11 +18,16 @@ class SimilarityGroupNorm(Module):
                  version: int = 14, eps=1e-12, no_shuff_best_k_p: float = 0.1,
                  shuff_thrs_std_only: int = False,
                  std_threshold_l: int = 0, std_threshold_h: int = 1,
-                 keep_best_group_num_start: int = 0):
+                 keep_best_group_num_start: int = 0,
+                 use_VGN: bool = False
+                 ):
         super(SimilarityGroupNorm, self).__init__()
 
-        self.groupNorm = GroupNorm(num_groups, num_channels, eps=eps,
-                                   affine=True)
+        if use_VGN:
+            self.groupNorm = VariableGroupNorm(num_channels, eps=eps)
+        else:
+            self.groupNorm = GroupNorm(num_groups, num_channels, eps=eps,
+                                       affine=True)
         self.indexes = None
         self.reverse_indexes = None
         self.groups_representation_num = None  # not used
@@ -46,6 +52,8 @@ class SimilarityGroupNorm(Module):
         self.eps = eps
         self.strategy = strategy
         self.recluster_num = 0
+        self.cluster_sizes = torch.IntTensor([self.group_size] * num_groups)
+        self.use_VGN = use_VGN
 
         # those flags are updated in the AGN scheduler
         self.need_to_recluster = False
@@ -55,7 +63,7 @@ class SimilarityGroupNorm(Module):
 
         # start shuffle at epoch > 0
         if self.use_gn:
-            return self.groupNorm(Conv_input)
+            return self.groupNorm(Conv_input, self.cluster_sizes) if self.use_VGN else self.groupNorm(Conv_input)
 
         N, C, H, W = Conv_input.size()
 
@@ -65,7 +73,7 @@ class SimilarityGroupNorm(Module):
 
         # in case using shuffle last batch
         if self.indexes is None:
-            return self.groupNorm(Conv_input)
+            return self.groupNorm(Conv_input, self.cluster_sizes) if self.use_VGN else self.groupNorm(Conv_input)
 
         if self.training:
             indexes = self.indexes
@@ -81,8 +89,7 @@ class SimilarityGroupNorm(Module):
                                                 indexes[:N*C])
 
         GN_input = Conv_input_new_idx.view(N, C, H, W)
-        Conv_input_new_idx_norm = self.groupNorm(GN_input)
-
+        Conv_input_new_idx_norm = self.groupNorm(GN_input, self.cluster_sizes) if self.use_VGN else self.groupNorm(GN_input)
         Conv_input_new_idx_norm = Conv_input_new_idx_norm.view(-1, W * H)
 
         # Use torch.index_select for better performance
@@ -131,7 +138,7 @@ class SimilarityGroupNorm(Module):
             else:
                 filtered_channels_input = channels_input
 
-            channelsClustering = self.strategy.sort_channels(
+            channelsClustering, self.cluster_sizes = self.strategy.sort_channels(
                 filtered_channels_input)
 
         else:
@@ -275,12 +282,23 @@ class SimilarityGroupNorm(Module):
 
 class ClusteringStrategy(ABC):
     def __init__(self, num_groups: int, num_channels: int = 32,
-                 plot_groups: bool = False):
+                 plot_groups: bool = False, use_VGN: bool = False,
+                 VGN_min_gs_mul: float = 1,
+                 VGN_max_gs_mul: float = 1
+                 ):
         self.num_groups = num_groups
         self.num_channels = num_channels
         self.group_size = int(num_channels / num_groups)
+        if use_VGN:
+            self.min_group_size = np.ceil(self.group_size*VGN_min_gs_mul)
+            self.max_group_size = np.ceil(self.group_size*VGN_max_gs_mul)
+        else:
+            self.min_group_size = self.group_size
+            self.max_group_size = self.group_size
         self.filtered_num_groups = num_groups
         self._plot_groups = plot_groups
+        self.use_VGN = use_VGN
+
 
     @abstractmethod
     def sort_channels(self, channels_input):
@@ -414,8 +432,8 @@ class ClusteringStrategy(ABC):
 
         # Perform constrained k-means clustering on the channel statistics
         kmeans = KMeansConstrained(n_clusters=self.filtered_num_groups,
-                                   size_min=self.group_size,
-                                   size_max=self.group_size,
+                                   size_min=self.min_group_size,
+                                   size_max=self.max_group_size,
                                    random_state=0)
         kmeans.fit(channel_stats.cpu().detach().numpy())
 
@@ -423,10 +441,13 @@ class ClusteringStrategy(ABC):
         # gives the group for each channel
         groups = kmeans.labels_
 
+        # Get the sizes of each group
+        cluster_sizes = np.bincount(groups)
+
         # Get the indices that would sort the groups
         new_order = np.argsort(groups)
 
-        return new_order
+        return new_order, cluster_sizes
 
     def SortChannelsOutliersKMeans(self, channels_input,
                                    method='IsolationForest'):
@@ -462,7 +483,7 @@ class ClusteringStrategy(ABC):
         mean_vals, var_vals = self.get_mean_val_no_outliers(outliers,
                                                             channels_input)
 
-        new_order = self.KMeans_2D(var_vals, mean_vals)
+        new_order, cluster_sizes = self.KMeans_2D(var_vals, mean_vals)
 
         ret = self.create_shuff_for_total_batch(channels_input,
                                                 torch.from_numpy(new_order))
@@ -473,7 +494,7 @@ class ClusteringStrategy(ABC):
 
             self.plot_groups(new_order, channel_means, channel_vars)
 
-        return ret.to(channels_input.device)
+        return ret.to(channels_input.device), cluster_sizes
 
     def get_mean_val_no_outliers(self, outliers, channels_input):
 
@@ -562,7 +583,7 @@ class SortChannelsV1(ClusteringStrategy):
         channelsClustering = torch.Tensor(sorted_indexes)  # zeros_like(
         # sort_metric, device=global_vars.device)
 
-        return channelsClustering
+        return channelsClustering, None
 
 
 class SortChannelsV2(ClusteringStrategy):
@@ -590,7 +611,7 @@ class SortChannelsV2(ClusteringStrategy):
         channelsClustering = torch.Tensor(sorted_indexes)  # zeros_like(
         # sort_metric, device=global_vars.device)
 
-        return channelsClustering
+        return channelsClustering, None
 
 
 class SortChannelsV3(ClusteringStrategy):
@@ -604,7 +625,7 @@ class SortChannelsV3(ClusteringStrategy):
                                 key=lambda k: sort_metric[k])
         channelsClustering = torch.Tensor(sorted_indexes)
 
-        return channelsClustering
+        return channelsClustering, None
 
 
 class SortChannelsV4(ClusteringStrategy):
@@ -631,7 +652,7 @@ class SortChannelsV4(ClusteringStrategy):
                 channelsClustering[
                     indexes[g * self.group_size + i]] = g * self.group_size + i
 
-        return channelsClustering
+        return channelsClustering, None
 
     def get_df(self, channels_input):
         N, C, H, W = channels_input.size()
@@ -666,7 +687,7 @@ class SortChannelsV5(ClusteringStrategy):
             channelsClustering = cat((channelsClustering, torch.Tensor(
                 sorted(range(len(sort_metric[b, :])),
                        key=lambda k: sort_metric[b][k])) + (C * b)))
-        return channelsClustering
+        return channelsClustering, None
 
 
 class SortChannelsV6(ClusteringStrategy):
@@ -678,7 +699,7 @@ class SortChannelsV6(ClusteringStrategy):
                                 key=lambda k: sort_metric[k])
         channelsClustering = torch.Tensor(sorted_indexes)
 
-        return channelsClustering
+        return channelsClustering, None
 
 
 class SortChannelsV7(ClusteringStrategy):
@@ -708,7 +729,7 @@ class SortChannelsV7(ClusteringStrategy):
 
         sorted_indexes = np.argsort(x_embedded)
 
-        return torch.from_numpy(sorted_indexes)
+        return torch.from_numpy(sorted_indexes), None
 
 
 class SortChannelsV8(ClusteringStrategy):
@@ -724,7 +745,7 @@ class SortChannelsV8(ClusteringStrategy):
 
             self.plot_groups(channelsClustering, channel_means, channel_vars)
 
-        return channelsClustering
+        return channelsClustering, None
 
 
 class SortChannelsV9(ClusteringStrategy):
@@ -740,7 +761,7 @@ class SortChannelsV9(ClusteringStrategy):
         channelsClustering = \
             (channelsClustering.reshape(N, C) + factors.unsqueeze(1)).view(-1)
 
-        return channelsClustering.to(channels_input.device)
+        return channelsClustering.to(channels_input.device), None
 
 
 class SortChannelsV10(ClusteringStrategy):
@@ -762,7 +783,7 @@ class SortChannelsV10(ClusteringStrategy):
 
             self.plot_groups(order, channel_means, channel_vars)
 
-        return channelsClustering.to(channels_input.device)
+        return channelsClustering.to(channels_input.device), None
 
 
 class SortChannelsV11(ClusteringStrategy):
@@ -774,7 +795,7 @@ class SortChannelsV11(ClusteringStrategy):
             channels_input, channelsClustering
         )
 
-        return channelsClustering
+        return channelsClustering, None
 
 
 class SortChannelsV12(ClusteringStrategy):
@@ -810,7 +831,7 @@ class SortChannelsV12(ClusteringStrategy):
         if self._plot_groups:
             self.plot_groups(order, channel_means, channel_vars)
 
-        return ret.to(channels_input.device)
+        return ret.to(channels_input.device), None
 
 
 class SortChannelsV13(ClusteringStrategy):
@@ -820,7 +841,7 @@ class SortChannelsV13(ClusteringStrategy):
         channel_vars = torch.var(channels_input, dim=(0, 2, 3))
 
         # Get the indices that would sort the groups
-        new_order = self.KMeans_2D(channel_vars, channel_means)
+        new_order, cluster_sizes = self.KMeans_2D(channel_vars, channel_means)
 
         ret = self.create_shuff_for_total_batch(channels_input,
                                                 torch.from_numpy(new_order))
@@ -831,7 +852,7 @@ class SortChannelsV13(ClusteringStrategy):
 
             self.plot_groups(new_order, channel_means, channel_vars)
 
-        return ret.to(channels_input.device)
+        return ret.to(channels_input.device), None
 
 
 class SortChannelsV14(ClusteringStrategy):

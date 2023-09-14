@@ -121,6 +121,14 @@ parser.add_argument('--std_threshold_h', default=1, type=float,
                     help="if shuff_thrs_std_only, this is use as high threshold to "
                          "the mean of the variances.")
 
+parser.add_argument('--use_VGN', default=False, type=bool,
+                    help="flag that indicate the use Variable Group Normalization. if using it, you also need to use "
+                         "VGN_max_gs_mul and VGN_min_gs_mul")
+parser.add_argument('--VGN_max_gs_mul', default=1, type=float,
+                    help="maximum multiply value for the group size in the VGN")
+parser.add_argument('--VGN_min_gs_mul', default=1, type=float,
+                    help="minimum multiply value for the group size in the VGN")
+
 
 def apply_config(args: Namespace, config_path: str):
     """Overwrite the values in an arguments object by values of namesake
@@ -296,6 +304,9 @@ def generate_wandb_name():
             wanda_test_name += f'_V{args.RGN_version}'
         else:
             wanda_test_name += f'_V{args.SGN_version}'
+
+        if args.use_VGN:
+            wanda_test_name += f'_use-VGN'
 
         if args.epoch_start_cluster != 0:
             wanda_test_name += f'_epoch-start-cluster-{args.epoch_start_cluster}'

@@ -13,7 +13,10 @@ class NormalizationFactory:
                  eps: float = 1e-12, no_shuff_best_k_p: float = 1.0,
                  shuff_thrs_std_only: bool = False,
                  std_threshold_l: int = 0, std_threshold_h: int = 1,
-                 keep_best_group_num_start: int = 0
+                 keep_best_group_num_start: int = 0,
+                 use_VGN: bool = False,
+                 VGN_min_gs_mul: float = 1,
+                 VGN_max_gs_mul: float = 1
                  ):
         self.version = version
 
@@ -31,6 +34,10 @@ class NormalizationFactory:
         self.std_threshold_l = std_threshold_l
         self.std_threshold_h = std_threshold_h
         self.keep_best_group_num_start = keep_best_group_num_start
+        self.use_VGN = use_VGN
+        self.VGN_min_gs_mul = VGN_min_gs_mul
+        self.VGN_max_gs_mul = VGN_max_gs_mul
+
 
     def create_strategy(self, group_norm, planes):
         strategy_class_name = f'SortChannelsV{self.version}'
@@ -41,7 +48,8 @@ class NormalizationFactory:
                             f"{self.version} is not available!")
 
         return strategy_class(num_groups=group_norm, num_channels=planes,
-                              plot_groups=self.plot_groups)
+                              plot_groups=self.plot_groups, use_VGN=self.use_VGN,
+                              VGN_min_gs_mul=self.VGN_min_gs_mul, VGN_max_gs_mul=self.VGN_max_gs_mul)
 
     def init_norm_layer(self, norm_layer):
         if isinstance(norm_layer, (BatchNorm2d, GroupNorm, LayerNorm)):
@@ -72,7 +80,7 @@ class NormalizationFactory:
         else:
             num_groups = self.groupsBySize(planes) if self.group_by_size else self.group_norm
 
-            if False: #self.group_by_size and self.group_size >= planes:
+            if self.group_by_size and self.group_size >= planes:
                 normalization_layer = LayerNorm(planes, eps=self.eps)
             elif self.method == "GN":
                 normalization_layer = GroupNorm(num_groups, planes, eps=self.eps)
@@ -85,7 +93,8 @@ class NormalizationFactory:
                     shuff_thrs_std_only=self.shuff_thrs_std_only,
                     std_threshold_l=self.std_threshold_l,
                     std_threshold_h=self.std_threshold_h,
-                    keep_best_group_num_start=self.keep_best_group_num_start
+                    keep_best_group_num_start=self.keep_best_group_num_start,
+                    use_VGN=self.use_VGN
                 )
             else:
                 normalization_layer = normalization_layer_dict[self.method](

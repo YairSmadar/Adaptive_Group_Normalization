@@ -66,7 +66,10 @@ def main():
                     "shuff_thrs_std_only": args.shuff_thrs_std_only,
                     "std_threshold_l": args.std_threshold_l,
                     "std_threshold_h": args.std_threshold_h,
-                    "keep_best_group_num_start": args.keep_best_group_num_start
+                    "keep_best_group_num_start": args.keep_best_group_num_start,
+                    "use_VGN": args.use_VGN,
+                    "VGN_min_gs_mul": args.VGN_min_gs_mul,
+                    "VGN_max_gs_mul": args.VGN_max_gs_mul
                 },
         }
 

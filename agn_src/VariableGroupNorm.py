@@ -46,7 +46,7 @@ class VariableGroupNormFunction(torch.autograd.Function):
         ctx.group_sizes = group_sizes
         ctx.eps = eps
 
-        return out
+        return out.clone()
 
     @staticmethod
     def backward(ctx, grad_output):
