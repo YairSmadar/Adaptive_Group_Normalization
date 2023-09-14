@@ -37,9 +37,9 @@ import torchvision
 import yaml
 from ultralytics.yolo.utils.checks import check_requirements
 
-from utils import TryExcept, emojis
-from utils.downloads import curl_download, gsutil_getsize
-from utils.metrics import box_iou, fitness
+from yolov5.utils import TryExcept, emojis
+from yolov5.utils.downloads import curl_download, gsutil_getsize
+from yolov5.utils.metrics import box_iou, fitness
 
 FILE = Path(__file__).resolve()
 ROOT = FILE.parents[1]  # YOLOv5 root directory
@@ -538,7 +538,7 @@ def check_dataset(data, autodownload=True):
 
 def check_amp(model):
     # Check PyTorch Automatic Mixed Precision (AMP) functionality. Return True on correct operation
-    from models.common import AutoShape, DetectMultiBackend
+    from yolov5.models.common import AutoShape, DetectMultiBackend
 
     def amp_allclose(model, im):
         # All close FP32 vs AMP results
