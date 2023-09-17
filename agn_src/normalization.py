@@ -38,7 +38,6 @@ class NormalizationFactory:
         self.VGN_min_gs_mul = VGN_min_gs_mul
         self.VGN_max_gs_mul = VGN_max_gs_mul
 
-
     def create_strategy(self, group_norm, planes):
         strategy_class_name = f'SortChannelsV{self.version}'
         strategy_class = getattr(similarity_group_normalization, strategy_class_name, None)

@@ -6,22 +6,19 @@ class VariableGroupNormFunction(torch.autograd.Function):
 
     @staticmethod
     def forward(ctx, x, weight, bias, group_sizes, eps):
-        # Extract dimensions of the input tensor for reshaping purposes.
         N, C, H, W = x.size()
-
-        # Flatten the height and width dimensions for easier group-wise operations.
         x_flattened = x.view(N, C, -1)
 
         # Validate that the provided group sizes are consistent with the number of channels.
         VariableGroupNormFunction._validate_group_sizes(group_sizes, C)
 
+        # Pre-compute group boundaries
+        boundaries = list(zip([0] + group_sizes[:-1].cumsum(0).tolist(), group_sizes.cumsum(0).tolist()))
+
         # Lists to store normalized tensors and statistics for each group.
         normalized_groups, mus, ivars = [], [], []
 
-        # Calculate cumulative group sizes for extracting group-wise slices.
-        cumsum_group_sizes = group_sizes.cumsum(0)
-        start = 0
-        for end in cumsum_group_sizes:
+        for start, end in boundaries:
             # Extract the channels corresponding to the current group.
             x_group = x_flattened[:, start:end, :]
 
@@ -32,7 +29,6 @@ class VariableGroupNormFunction(torch.autograd.Function):
             normalized_groups.append(xhat)
             mus.append(mu)
             ivars.append(ivar)
-            start = end
 
         # Concatenate all normalized groups to form the full normalized tensor.
         normalized_tensor = torch.cat(normalized_groups, dim=1)
@@ -40,10 +36,10 @@ class VariableGroupNormFunction(torch.autograd.Function):
         # Scale and shift the normalized tensor using weight and bias parameters.
         out = (normalized_tensor * weight.view(1, C, 1) + bias.view(1, C, 1)).view(N, C, H, W)
 
-        # Save tensors required for the backward pass.
-        ctx.save_for_backward(normalized_tensor, weight, *mus, *ivars)
-        # Store non-tensor information required for backward.
-        ctx.group_sizes = group_sizes
+        # Store less data on ctx
+        ctx.save_for_backward(normalized_tensor, weight)
+        ctx.intermediate_values = (mus, ivars)
+        ctx.boundaries = boundaries
         ctx.eps = eps
 
         return out.clone()
@@ -51,22 +47,16 @@ class VariableGroupNormFunction(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad_output):
         # Retrieve saved tensors from the forward pass.
-        normalized_tensor, weight, *intermediate_values = ctx.saved_tensors
-        group_sizes = ctx.group_sizes
-        N, C, H, W = grad_output.size()
+        normalized_tensor, weight = ctx.saved_tensors
+        mus, ivars = ctx.intermediate_values
+        boundaries = ctx.boundaries
 
-        # Flatten the gradient of the output to align with the original reshaped tensor.
+        N, C, H, W = grad_output.size()
         grad_output_flattened = grad_output.view(N, C, -1)
         grad_inputs = []
 
-        # Split intermediate values to retrieve saved statistics for each group.
-        num_groups = len(group_sizes)
-        mus = intermediate_values[:num_groups]
-        ivars = intermediate_values[num_groups:2 * num_groups]
-
         # Compute gradient for each group.
-        for idx, group_size in enumerate(group_sizes):
-            start, end = sum(group_sizes[:idx]), sum(group_sizes[:idx + 1])
+        for idx, (start, end) in enumerate(boundaries):
             grad_input_group = VariableGroupNormFunction._compute_group_gradient(
                 grad_output_flattened[:, start:end, :],
                 normalized_tensor[:, start:end, :],
@@ -79,11 +69,11 @@ class VariableGroupNormFunction(torch.autograd.Function):
         # Concatenate gradients for all groups to form gradient for the full tensor.
         grad_input_tensor = torch.cat(grad_inputs, dim=1).view(N, C, H, W)
 
-        # Compute gradients for weight and bias parameters.
+        # Compute gradients for weight and bias parameters
         grad_weight = (grad_output_flattened * normalized_tensor).sum(dim=(0, 2))
         grad_bias = grad_output_flattened.sum(dim=(0, 2))
 
-        return grad_input_tensor, grad_weight, grad_bias, None, None  # None for group_sizes and eps as they don't need gradients.
+        return grad_input_tensor, grad_weight, grad_bias, None, None
 
     @staticmethod
     def _validate_group_sizes(group_sizes, C):

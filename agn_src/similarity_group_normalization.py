@@ -415,6 +415,8 @@ class ClusteringStrategy(ABC):
     def create_shuff_for_total_batch(self, channels_input,
                                      channelsClustering):
         N, C, H, W = channels_input.size()
+        assert len(set(channelsClustering)) == C, \
+            "Not all of the channels are mapped!"
         factors = (torch.arange(0, N) * C).to(channels_input.device)
         channelsClustering = torch.cat([channelsClustering] * N)
         channelsClustering = channelsClustering.to(channels_input.device)
