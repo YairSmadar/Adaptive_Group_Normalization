@@ -103,15 +103,18 @@ class VariableGroupNormFunction(torch.autograd.Function):
         # Compute gradient of the normalized values with respect to the input.
         d_normalized = grad_output_group * gamma.view(1, G_channels, 1)
 
+         # Cache this term as it's used multiple times
+        term = normalized_group - mu
+
         # Gradient with respect to variance.
-        d_var = (-0.5 * ivar * (d_normalized * (normalized_group - mu)).sum(dim=[1, 2], keepdim=True))
+        d_var = (-0.5 * ivar * (d_normalized * term).sum(dim=[1, 2], keepdim=True))
 
         # Gradient with respect to mean.
-        d_mu = (-ivar * d_normalized.sum(dim=[1, 2], keepdim=True)) - 2.0 / G * d_var * (normalized_group - mu).sum(
+        d_mu = (-ivar * d_normalized.sum(dim=[1, 2], keepdim=True)) - 2.0 / G * d_var * term.sum(
             dim=[1, 2], keepdim=True)
 
         # Gradient with respect to input x.
-        grad_input = d_normalized * ivar + d_mu / G + 2.0 / G * (normalized_group - mu) * d_var
+        grad_input = d_normalized * ivar + d_mu / G + 2.0 / G * term * d_var
 
         return grad_input
 
