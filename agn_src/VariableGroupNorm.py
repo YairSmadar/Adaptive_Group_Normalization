@@ -13,7 +13,8 @@ class VariableGroupNormFunction(torch.autograd.Function):
         VariableGroupNormFunction._validate_group_sizes(group_sizes, C)
 
         # Pre-compute group boundaries
-        boundaries = list(zip([0] + group_sizes[:-1].cumsum(0).tolist(), group_sizes.cumsum(0).tolist()))
+        boundaries = list(zip([0] + group_sizes[:-1].cumsum(0).tolist(),
+                              group_sizes.cumsum(0).tolist()))
 
         # Lists to store normalized tensors and statistics for each group.
         normalized_groups, mus, ivars = [], [], []
@@ -23,20 +24,31 @@ class VariableGroupNormFunction(torch.autograd.Function):
             x_group = x_flattened[:, start:end, :]
 
             # Normalize this group and store its statistics.
-            xhat, (mu, ivar) = VariableGroupNormFunction._normalize_group(x_group, eps)
+            xhat, (mu, ivar) = VariableGroupNormFunction._normalize_group(
+                x_group, eps)
 
             # Save normalized tensor and statistics for the backward pass.
             normalized_groups.append(xhat)
             mus.append(mu)
             ivars.append(ivar)
 
+            # Adjust scale and bias according to the calculated mean and inverse variance.
+            scale = ivar  # since ivar is 1/std
+            adjusted_bias = -mu * scale
+            if bias is not None:
+                group_bias = bias[start:end].view(1, -1, 1)
+                adjusted_bias = -mu * scale + group_bias
+
+            xhat = xhat * (weight[start:end].view(1, -1,
+                                                  1) if weight is not None else 1) + adjusted_bias
+            normalized_groups[-1] = xhat
+
         # Concatenate all normalized groups to form the full normalized tensor.
         normalized_tensor = torch.cat(normalized_groups, dim=1)
 
-        # Scale and shift the normalized tensor using weight and bias parameters.
-        out = (normalized_tensor * weight.view(1, C, 1) + bias.view(1, C, 1)).view(N, C, H, W)
+        out = normalized_tensor.view(N, C, H, W)
 
-        # Store less data on ctx
+        # Store data on ctx for backward pass
         ctx.save_for_backward(normalized_tensor, weight)
         ctx.intermediate_values = (mus, ivars)
         ctx.boundaries = boundaries
@@ -87,8 +99,9 @@ class VariableGroupNormFunction(torch.autograd.Function):
         # Compute mean and variance for the entire group.
         mu = x_group.mean(dim=[1, 2], keepdim=True)  # Mean over the channel and spatial dimensions
         var = x_group.var(dim=[1, 2], keepdim=True)  # Variance over the channel and spatial dimensions
+        zeros_as_var = torch.zeros_like(var)
         # Compute standard deviation and its inverse.
-        std = torch.sqrt(var + eps)
+        std = torch.sqrt(torch.max(var, zeros_as_var) + eps)
         ivar = 1.0 / std
         # Normalize the group using computed statistics.
         xhat = (x_group - mu) * ivar
@@ -136,14 +149,22 @@ class VariableGroupNorm(nn.Module):
             **self.__dict__)
 
 
+def wrapped_vgn_forward(*args, **kwargs):
+    return VariableGroupNormFunction.apply(*[a.double() if torch.is_tensor(a) and a.dtype != torch.int else a for a in args])
+
+
+
+
 if __name__ == '__main__':
-    from torch.autograd import gradcheck
+    # Create small double precision inputs
+    x = torch.randn(2, 6, 5, 5, dtype=torch.double, requires_grad=True)
+    weight = torch.randn(6, dtype=torch.double, requires_grad=True)
+    bias = torch.randn(6, dtype=torch.double, requires_grad=True)
+    group_sizes = torch.tensor([2, 2, 2],
+                               dtype=torch.int)  # example group sizes
+    eps = torch.tensor(1e-12, dtype=torch.double, requires_grad=False)
 
-    # Use double precision, required for gradcheck
-    x = torch.randn(10, 20, 5, 5, dtype=torch.double, requires_grad=True).double()
-    weight = torch.randn(20, dtype=torch.double, requires_grad=True).double()
-    bias = torch.randn(20, dtype=torch.double, requires_grad=True).double()
-    group_sizes = torch.tensor([10, 10], dtype=torch.int64)
+    # Perform the gradient check
+    check = torch.autograd.gradcheck(wrapped_vgn_forward, (x, weight, bias, group_sizes, eps))
+    print(f"Gradcheck result: {check}")  # If True, gradients are correct.
 
-    # Check gradients
-    gradcheck(VariableGroupNormFunction.apply, (x, weight, bias, group_sizes, 1e-5))
