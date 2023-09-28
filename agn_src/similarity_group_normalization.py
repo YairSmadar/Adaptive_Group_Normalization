@@ -112,6 +112,8 @@ class SimilarityGroupNorm(Module):
             self.reverse_indexes = torch.argsort(self.indexes).to(
                 Conv_input.device)
 
+        self.validate_new_indexes(Conv_input)
+
     def SimilarityGroupNormClustering(self, channels_input):
         N, C, H, W = channels_input.size()
         if self.strategy is not None:
@@ -140,6 +142,10 @@ class SimilarityGroupNorm(Module):
 
             channelsClustering, self.cluster_sizes = self.strategy.sort_channels(
                 filtered_channels_input)
+
+            if type(self.cluster_sizes) is not torch.Tensor:
+                self.cluster_sizes = \
+                    torch.from_numpy(self.cluster_sizes).int().to(channels_input.device)
 
         else:
             print("No clustering strategy defined!")
@@ -207,6 +213,20 @@ class SimilarityGroupNorm(Module):
                                               channelsClustering)
 
         self.indexes = channelsClustering.to(dtype=torch.int64)
+
+    def validate_new_indexes(self, conv_input):
+        N, C, _, _ = conv_input.size()
+        if self.indexes is not None:
+            indexes_as_set = set(self.indexes.tolist())
+            reversed_as_set = set(self.reverse_indexes.tolist())
+
+            assert len(indexes_as_set) == C*N, \
+                f"The number of channels in indexes is {len(indexes_as_set)} " \
+                f"while the number of channels is {C*N}"
+
+            assert len(reversed_as_set) == C*N, \
+                f"The number of channels in indexes is {len(reversed_as_set)}" \
+                f" while the number of channels is {C*N}"
 
     def exclude_std_groups(self, channels_input, best_std_groups):
         excluded_channels = []
