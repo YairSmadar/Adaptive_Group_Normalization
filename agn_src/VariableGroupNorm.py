@@ -32,23 +32,13 @@ class VariableGroupNormFunction(torch.autograd.Function):
             mus.append(mu)
             ivars.append(ivar)
 
-            # Adjust scale and bias according to the calculated mean and inverse variance.
-            scale = ivar  # since ivar is 1/std
-            adjusted_bias = -mu * scale
-            if bias is not None:
-                group_bias = bias[start:end].view(1, -1, 1)
-                adjusted_bias = -mu * scale + group_bias
-
-            xhat = xhat * (weight[start:end].view(1, -1,
-                                                  1) if weight is not None else 1) + adjusted_bias
-            normalized_groups[-1] = xhat
-
         # Concatenate all normalized groups to form the full normalized tensor.
         normalized_tensor = torch.cat(normalized_groups, dim=1)
 
-        out = normalized_tensor.view(N, C, H, W)
+        # Scale and shift the normalized tensor using weight and bias parameters.
+        out = (normalized_tensor * weight.view(1, C, 1) + bias.view(1, C, 1)).view(N, C, H, W)
 
-        # Store data on ctx for backward pass
+        # Store less data on ctx
         ctx.save_for_backward(normalized_tensor, weight)
         ctx.intermediate_values = (mus, ivars)
         ctx.boundaries = boundaries
