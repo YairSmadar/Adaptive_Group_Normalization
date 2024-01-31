@@ -3,8 +3,8 @@
   "SGN_version": 14,
   "RGN_version": 2,
   "use_VGN": true,
-  "VGN_min_gs_mul": 0.8,
-  "VGN_max_gs_mul": 1.2,
+  "VGN_min_gs_mul": 1.0,
+  "VGN_max_gs_mul": 1.0,
   "load": "init_weights\\W1.pt",
   "method": "SGN",
   "epochs": 100,
@@ -20,7 +20,7 @@
   "use_wandb": false,
   "group_norm_size": 32,
   "plot_groups": false,
-  "epoch_start_cluster": 0,
+  "epoch_start_cluster": 1,
   "max_norm_shuffle": 70,
   "shuff_thrs_std_only": false,
   "std_threshold_l": 1,
@@ -28,6 +28,9 @@
   "scheduler_name": "default",
   "classes_to_train":
   [
-    "apple"
+    "apple",
+    "bear",
+    "aquarium_fish",
+    "baby"
   ]
 }

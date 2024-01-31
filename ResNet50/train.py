@@ -292,19 +292,6 @@ def validate(val_loader, model, criterion, epoch, get_to_start_epoch=False):
     return losses.avg, top1.avg, top5.avg
 
 
-def channelsReclustering(reclustring_loader, model, criterion, epoch):
-    for i, (input, target) in enumerate(reclustring_loader):
-        if global_vars.device_name == 'cuda':
-            target = target.cuda(non_blocking=True)
-
-        # compute output
-        with no_grad():
-            output = model(input)
-            loss = criterion(output, target)
-
-        return
-
-
 class AverageMeter(object):
     """Computes and stores the average and current value"""
 
