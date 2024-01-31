@@ -61,19 +61,22 @@ class SimilarityGroupNorm(Module):
 
     def forward(self, Conv_input: torch.Tensor):
 
-        # start shuffle at epoch > 0
-        if self.use_gn:
-            return self.groupNorm(Conv_input, self.cluster_sizes) if self.use_VGN else self.groupNorm(Conv_input)
-
-        N, C, H, W = Conv_input.size()
-
         if self.need_to_recluster:
             self.recluster(Conv_input)
             self.need_to_recluster = False
 
+        if self.use_VGN:
+            return self.groupNorm(Conv_input, self.cluster_sizes, self.indexes, self.reverse_indexes)
+
+        # start shuffle at epoch > 0
+        if self.use_gn:
+            return self.groupNorm(Conv_input)
+
+        N, C, H, W = Conv_input.size()
+
         # in case using shuffle last batch
         if self.indexes is None:
-            return self.groupNorm(Conv_input, self.cluster_sizes) if self.use_VGN else self.groupNorm(Conv_input)
+            return self.groupNorm(Conv_input)
 
         if self.training:
             indexes = self.indexes
@@ -89,7 +92,7 @@ class SimilarityGroupNorm(Module):
                                                 indexes[:N*C])
 
         GN_input = Conv_input_new_idx.view(N, C, H, W)
-        Conv_input_new_idx_norm = self.groupNorm(GN_input, self.cluster_sizes) if self.use_VGN else self.groupNorm(GN_input)
+        Conv_input_new_idx_norm = self.groupNorm(GN_input)
         Conv_input_new_idx_norm = Conv_input_new_idx_norm.view(-1, W * H)
 
         # Use torch.index_select for better performance
@@ -97,8 +100,7 @@ class SimilarityGroupNorm(Module):
             Conv_input_new_idx_norm,
             0, reverse_indexes[:N*C])
 
-        ret = Conv_input_orig_idx_norm.view(N, C, H, W).requires_grad_(
-            requires_grad=True)
+        ret = Conv_input_orig_idx_norm.view(N, C, H, W)
 
         return ret
 
