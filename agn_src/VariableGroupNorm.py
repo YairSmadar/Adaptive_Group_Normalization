@@ -89,9 +89,9 @@ class VariableGroupNormFunction(torch.autograd.Function):
         # Compute mean and variance for the entire group.
         mu = x_group.mean(dim=[1, 2], keepdim=True)  # Mean over the channel and spatial dimensions
         var = x_group.var(dim=[1, 2], keepdim=True)  # Variance over the channel and spatial dimensions
-        zeros_as_var = torch.zeros_like(var)
+
         # Compute standard deviation and its inverse.
-        std = torch.sqrt(torch.max(var, zeros_as_var) + eps)
+        std = torch.sqrt(var + eps)
         ivar = 1.0 / std
         # Normalize the group using computed statistics.
         xhat = (x_group - mu) * ivar
@@ -106,7 +106,7 @@ class VariableGroupNormFunction(torch.autograd.Function):
         # Compute gradient of the normalized values with respect to the input.
         d_normalized = grad_output_group * gamma.view(1, G_channels, 1)
 
-         # Cache this term as it's used multiple times
+        # Cache this term as it's used multiple times
         term = normalized_group - mu
 
         # Gradient with respect to variance.
