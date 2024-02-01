@@ -11,6 +11,7 @@ from scipy.stats import zscore
 from abc import ABC, abstractmethod
 import matplotlib.pyplot as plt
 from agn_src.VariableGroupNorm import VariableGroupNorm
+from agn_utils.reorder_channels import reorder_channels
 
 
 class SimilarityGroupNorm(Module):
@@ -59,21 +60,19 @@ class SimilarityGroupNorm(Module):
         self.need_to_recluster = False
         self.use_gn = False
 
-    def forward(self, Conv_input: torch.Tensor):
+    def forward(self, input_tensor: torch.Tensor):
 
         # start shuffle at epoch > 0
         if self.use_gn:
-            return self.groupNorm(Conv_input, self.cluster_sizes) if self.use_VGN else self.groupNorm(Conv_input)
-
-        N, C, H, W = Conv_input.size()
+            return self.groupNorm(input_tensor, self.cluster_sizes) if self.use_VGN else self.groupNorm(input_tensor)
 
         if self.need_to_recluster:
-            self.recluster(Conv_input)
+            self.recluster(input_tensor)
             self.need_to_recluster = False
 
         # in case using shuffle last batch
         if self.indexes is None:
-            return self.groupNorm(Conv_input, self.cluster_sizes) if self.use_VGN else self.groupNorm(Conv_input)
+            return self.groupNorm(input_tensor, self.cluster_sizes) if self.use_VGN else self.groupNorm(input_tensor)
 
         if self.training:
             indexes = self.indexes
@@ -82,23 +81,11 @@ class SimilarityGroupNorm(Module):
             indexes = self.eval_indexes
             reverse_indexes = self.eval_reverse_indexes
 
-        Conv_input_reshaped = Conv_input.view(-1, W * H)
+        reorder_input = reorder_channels(input_tensor, indexes, reverse_indexes)
 
-        # Use torch.index_select for better performance
-        Conv_input_new_idx = torch.index_select(Conv_input_reshaped, 0,
-                                                indexes[:N*C])
+        norm_input = self.groupNorm(reorder_input, self.cluster_sizes) if self.use_VGN else self.groupNorm(reorder_input)
 
-        GN_input = Conv_input_new_idx.view(N, C, H, W)
-        Conv_input_new_idx_norm = self.groupNorm(GN_input, self.cluster_sizes) if self.use_VGN else self.groupNorm(GN_input)
-        Conv_input_new_idx_norm = Conv_input_new_idx_norm.view(-1, W * H)
-
-        # Use torch.index_select for better performance
-        Conv_input_orig_idx_norm = torch.index_select(
-            Conv_input_new_idx_norm,
-            0, reverse_indexes[:N*C])
-
-        ret = Conv_input_orig_idx_norm.view(N, C, H, W).requires_grad_(
-            requires_grad=True)
+        ret = reorder_channels(norm_input, indexes, reverse_indexes)
 
         return ret
 
