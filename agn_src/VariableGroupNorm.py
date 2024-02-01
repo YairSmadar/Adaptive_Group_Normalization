@@ -5,17 +5,10 @@ import torch.nn as nn
 class VariableGroupNormFunction(torch.autograd.Function):
 
     @staticmethod
-    def forward(ctx, x, weight, bias, group_sizes, indexes, reverse_indexes, eps):
+    def forward(ctx, x, weight, bias, group_sizes, eps):
         N, C, H, W = x.size()
 
-        if indexes is not None:
-            # shuffle channels according to indexes
-            x_reshaped = x.view(-1, W * H)
-            x_new_indexes = torch.index_select(x_reshaped, 0,
-                                               indexes[:N * C])
-            x_flattened = x_new_indexes.view(N, C, -1)
-        else:
-            x_flattened = x.view(N, C, -1)
+        x_flattened = x.view(N, C, -1)
 
         # Validate that the provided group sizes are consistent with the number of channels.
         VariableGroupNormFunction._validate_group_sizes(group_sizes, C)
@@ -46,25 +39,14 @@ class VariableGroupNormFunction(torch.autograd.Function):
         # Scale and shift the normalized tensor using weight and bias parameters.
         out = (normalized_tensor * weight.view(1, C, 1) + bias.view(1, C, 1)).view(N, C, H, W)
 
-        # shuffle channels back according to reverse_indexes
-        if reverse_indexes is not None:
-            out_flattened = out.view(-1, W * H)
-            out_orig_indexes = torch.index_select(
-                out_flattened,
-                0, reverse_indexes[:N * C])
-            final_norm_out = out_orig_indexes.view(N, C, H, W)
-        else:
-            final_norm_out = out
 
         # Store less data on ctx
         ctx.save_for_backward(normalized_tensor, weight)
         ctx.intermediate_values = (mus, ivars)
         ctx.boundaries = boundaries
-        ctx.indexes = indexes
-        ctx.reverse_indexes = reverse_indexes
         ctx.eps = eps
 
-        return final_norm_out.clone()
+        return out.clone()
 
     @staticmethod
     def backward(ctx, grad_output):
@@ -72,20 +54,10 @@ class VariableGroupNormFunction(torch.autograd.Function):
         normalized_tensor, weight = ctx.saved_tensors
         mus, ivars = ctx.intermediate_values
         boundaries = ctx.boundaries
-        indexes = ctx.indexes
-        reverse_indexes = ctx.reverse_indexes
 
         N, C, H, W = grad_output.size()
 
-        if indexes is not None:
-            # shuffle channels according to indexes
-            grad_output_reshaped = grad_output.view(-1, W * H)
-            grad_output_new_indexes = torch.index_select(grad_output_reshaped, 0,
-                                                         indexes[:N * C])
-            grad_output_flattened = grad_output_new_indexes.view(N, C, -1)
-        else:
-            grad_output_flattened = grad_output.view(N, C, -1)
-
+        grad_output_flattened = grad_output.view(N, C, -1)
         grad_inputs = []
 
         # Compute gradient for each group.
@@ -106,17 +78,7 @@ class VariableGroupNormFunction(torch.autograd.Function):
         grad_weight = (grad_output_flattened * normalized_tensor).sum(dim=(0, 2))
         grad_bias = grad_output_flattened.sum(dim=(0, 2))
 
-        # shuffle channels back according to reverse_indexes
-        if reverse_indexes is not None:
-            grad_input_tensor_flattened = grad_input_tensor.view(-1, W * H)
-            grad_input_tensor_flattened_indexes = torch.index_select(
-                grad_input_tensor_flattened,
-                0, reverse_indexes[:N * C])
-            final_grad_input_tensor = grad_input_tensor_flattened_indexes.view(N, C, H, W)
-        else:
-            final_grad_input_tensor = grad_input_tensor
-
-        return final_grad_input_tensor, grad_weight, grad_bias, None, None, None, None
+        return grad_input_tensor, grad_weight, grad_bias, None, None
 
     @staticmethod
     def _validate_group_sizes(group_sizes, C):
@@ -172,9 +134,8 @@ class VariableGroupNorm(nn.Module):
         self.weight = nn.Parameter(torch.ones(num_channels))
         self.bias = nn.Parameter(torch.zeros(num_channels))
 
-    def forward(self, x, group_sizes, indexes, reverse_indexes):
-        return VariableGroupNormFunction.apply(x, self.weight, self.bias, group_sizes, indexes, reverse_indexes,
-                                               self.eps)
+    def forward(self, x, group_sizes):
+        return VariableGroupNormFunction.apply(x, self.weight, self.bias, group_sizes, self.eps)
 
     def extra_repr(self):
         return '{num_channels}, group_sizes={group_sizes}, eps={eps}'.format(
@@ -182,8 +143,9 @@ class VariableGroupNorm(nn.Module):
 
 
 def wrapped_vgn_forward(*args, **kwargs):
-    return VariableGroupNormFunction.apply(
-        *[a.double() if torch.is_tensor(a) and a.dtype != torch.int else a for a in args])
+    return VariableGroupNormFunction.apply(*[a.double() if torch.is_tensor(a) and a.dtype != torch.int else a for a in args])
+
+
 
 
 if __name__ == '__main__':
