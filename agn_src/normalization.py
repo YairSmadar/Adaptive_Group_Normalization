@@ -75,7 +75,7 @@ class NormalizationFactory:
             raise Exception("The normalization method not recognized")
 
         if self.method == "BN":
-            normalization_layer = normalization_layer_dict[self.method](planes)
+            normalization_layer = normalization_layer_dict[self.method](num_features=planes, eps=self.eps)
         else:
             num_groups = self.groupsBySize(planes) if self.group_by_size else self.group_norm
 

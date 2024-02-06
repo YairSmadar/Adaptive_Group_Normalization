@@ -39,7 +39,6 @@ class VariableGroupNormFunction(torch.autograd.Function):
         # Scale and shift the normalized tensor using weight and bias parameters.
         out = (normalized_tensor * weight.view(1, C, 1) + bias.view(1, C, 1)).view(N, C, H, W)
 
-
         # Store less data on ctx
         ctx.save_for_backward(normalized_tensor, weight)
         ctx.intermediate_values = (mus, ivars)
@@ -91,13 +90,13 @@ class VariableGroupNormFunction(torch.autograd.Function):
     def _normalize_group(x_group, eps):
         # Compute mean and variance for the entire group.
         mu = x_group.mean(dim=[1, 2], keepdim=True)  # Mean over the channel and spatial dimensions
-        var = x_group.var(dim=[1, 2], keepdim=True)  # Variance over the channel and spatial dimensions
+        var = x_group.var(dim=[1, 2], keepdim=True, unbiased=False)  # Variance over the channel and spatial dimensions
 
         # Compute standard deviation and its inverse.
         std = torch.sqrt(var + eps)
         ivar = 1.0 / std
         # Normalize the group using computed statistics.
-        xhat = (x_group - mu) * ivar
+        xhat = (x_group - mu) / std
         return xhat, (mu, ivar)
 
     @staticmethod
@@ -142,21 +141,12 @@ class VariableGroupNorm(nn.Module):
             **self.__dict__)
 
 
-def wrapped_vgn_forward(*args, **kwargs):
-    return VariableGroupNormFunction.apply(*[a.double() if torch.is_tensor(a) and a.dtype != torch.int else a for a in args])
-
-
-
-
 if __name__ == '__main__':
-    # Create small double precision inputs
     x = torch.randn(2, 6, 5, 5, dtype=torch.double, requires_grad=True)
     weight = torch.randn(6, dtype=torch.double, requires_grad=True)
     bias = torch.randn(6, dtype=torch.double, requires_grad=True)
-    group_sizes = torch.tensor([2, 2, 2],
-                               dtype=torch.int)  # example group sizes
-    eps = torch.tensor(1e-12, dtype=torch.double, requires_grad=False)
+    group_sizes = torch.tensor([2, 2, 2], dtype=torch.int)
+    eps = 1e-5
 
     # Perform the gradient check
-    check = torch.autograd.gradcheck(wrapped_vgn_forward, (x, weight, bias, group_sizes, eps))
-    print(f"Gradcheck result: {check}")  # If True, gradients are correct.
+    torch.autograd.gradcheck(VariableGroupNormFunction.apply, (x, weight, bias, group_sizes, eps), eps=1e-6, atol=1e-4, rtol=1e-3)

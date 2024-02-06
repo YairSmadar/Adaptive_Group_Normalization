@@ -85,7 +85,7 @@ class SimilarityGroupNorm(Module):
 
         norm_input = self.groupNorm(reorder_input, self.cluster_sizes) if self.use_VGN else self.groupNorm(reorder_input)
 
-        ret = reorder_channels(norm_input, indexes, reverse_indexes)
+        ret = reorder_channels(norm_input, reverse_indexes, indexes)
 
         return ret
 

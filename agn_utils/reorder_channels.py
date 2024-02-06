@@ -36,5 +36,5 @@ class ReorderChannelsFunction(torch.autograd.Function):
 
 
 # Wrapper to easily apply our custom Function
-def reorder_channels(input, forward_indexes, reverse_indexes):
-    return ReorderChannelsFunction.apply(input, forward_indexes, reverse_indexes)
+def reorder_channels(input_tensor, forward_indexes, reverse_indexes):
+    return ReorderChannelsFunction.apply(input_tensor, forward_indexes, reverse_indexes)
