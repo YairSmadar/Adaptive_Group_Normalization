@@ -3,7 +3,7 @@ import torch.nn as nn
 
 
 class VariableGroupNorm(torch.nn.Module):
-    def __init__(self, num_channels, group_sizes, eps=1e-5):
+    def __init__(self, num_channels: int, group_sizes: torch.Tensor, eps: float=1e-5):
         super(VariableGroupNorm, self).__init__()
         self.num_channels = num_channels
         self.eps = eps
@@ -23,7 +23,7 @@ class VariableGroupNorm(torch.nn.Module):
         x_flattened = x.view(N, C, -1)
 
         # Pre-compute group boundaries
-        boundaries = [0] + torch.cumsum(torch.tensor(self.group_sizes), 0).tolist()
+        boundaries = [0] + torch.cumsum(self.group_sizes, 0).tolist()
 
         normalized_groups = []
         for i, (start, end) in enumerate(zip(boundaries[:-1], boundaries[1:])):
@@ -40,12 +40,16 @@ class VariableGroupNorm(torch.nn.Module):
         # Concatenate all normalized groups
         normalized_tensor = torch.cat(normalized_groups, dim=1)
 
-        # Assuming self.group_sizes is a list, convert it to a tensor correctly
-        group_sizes_tensor = torch.tensor(self.group_sizes, device=self.bias.device)
+        # Convert self.group_sizes to a tensor directly, specifying the device
+        if isinstance(self.group_sizes, list):
+            group_sizes_tensor = torch.tensor(self.group_sizes, device=self.bias.device, dtype=torch.long)
+        else:
+            # If it's already a tensor, just ensure it's on the correct device
+            group_sizes_tensor = self.group_sizes.to(self.bias.device)
 
         # Scale and shift using alphas and betas for each group
-        alphas_expanded = self.weight.repeat_interleave(group_sizes_tensor).view(1, C, 1)
-        betas_expanded = self.bias.repeat_interleave(group_sizes_tensor).view(1, C, 1)
+        alphas_expanded = self.weight.repeat_interleave(self.group_sizes).view(1, C, 1)
+        betas_expanded = self.bias.repeat_interleave(self.group_sizes).view(1, C, 1)
         out = normalized_tensor * alphas_expanded + betas_expanded
         out = out.view(N, C, H, W)
 
