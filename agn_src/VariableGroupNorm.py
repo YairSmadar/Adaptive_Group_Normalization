@@ -2,151 +2,54 @@ import torch
 import torch.nn as nn
 
 
-class VariableGroupNormFunction(torch.autograd.Function):
-
-    @staticmethod
-    def forward(ctx, x, weight, bias, group_sizes, eps):
-        N, C, H, W = x.size()
-
-        x_flattened = x.view(N, C, -1)
-
-        # Validate that the provided group sizes are consistent with the number of channels.
-        VariableGroupNormFunction._validate_group_sizes(group_sizes, C)
-
-        # Pre-compute group boundaries
-        boundaries = list(zip([0] + group_sizes[:-1].cumsum(0).tolist(),
-                              group_sizes.cumsum(0).tolist()))
-
-        # Lists to store normalized tensors and statistics for each group.
-        normalized_groups, mus, ivars = [], [], []
-
-        for start, end in boundaries:
-            # Extract the channels corresponding to the current group.
-            x_group = x_flattened[:, start:end, :]
-
-            # Normalize this group and store its statistics.
-            xhat, (mu, ivar) = VariableGroupNormFunction._normalize_group(
-                x_group, eps)
-
-            # Save normalized tensor and statistics for the backward pass.
-            normalized_groups.append(xhat)
-            mus.append(mu)
-            ivars.append(ivar)
-
-        # Concatenate all normalized groups to form the full normalized tensor.
-        normalized_tensor = torch.cat(normalized_groups, dim=1)
-
-        # Scale and shift the normalized tensor using weight and bias parameters.
-        out = (normalized_tensor * weight.view(1, C, 1) + bias.view(1, C, 1)).view(N, C, H, W)
-
-        # Store less data on ctx
-        ctx.save_for_backward(normalized_tensor, weight)
-        ctx.intermediate_values = (mus, ivars)
-        ctx.boundaries = boundaries
-        ctx.eps = eps
-
-        return out.clone()
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        # Retrieve saved tensors from the forward pass.
-        normalized_tensor, weight = ctx.saved_tensors
-        mus, ivars = ctx.intermediate_values
-        boundaries = ctx.boundaries
-
-        N, C, H, W = grad_output.size()
-
-        grad_output_flattened = grad_output.view(N, C, -1)
-        grad_inputs = []
-
-        # Compute gradient for each group.
-        for idx, (start, end) in enumerate(boundaries):
-            grad_input_group = VariableGroupNormFunction._compute_group_gradient(
-                grad_output_flattened[:, start:end, :],
-                normalized_tensor[:, start:end, :],
-                weight[start:end],
-                mus[idx],
-                ivars[idx]
-            )
-            grad_inputs.append(grad_input_group)
-
-        # Concatenate gradients for all groups to form gradient for the full tensor.
-        grad_input_tensor = torch.cat(grad_inputs, dim=1).view(N, C, H, W)
-
-        # Compute gradients for weight and bias parameters
-        grad_weight = (grad_output_flattened * normalized_tensor).sum(dim=(0, 2))
-        grad_bias = grad_output_flattened.sum(dim=(0, 2))
-
-        return grad_input_tensor, grad_weight, grad_bias, None, None
-
-    @staticmethod
-    def _validate_group_sizes(group_sizes, C):
-        # Ensure all group sizes are positive.
-        assert all(group_size > 0 for group_size in group_sizes), "Group size should be greater than zero."
-        # Ensure the sum of all group sizes matches the total number of channels.
-        assert sum(group_sizes) == C, "The sum of group sizes should equal the number of channels."
-
-    @staticmethod
-    def _normalize_group(x_group, eps):
-        # Compute mean and variance for the entire group.
-        mu = x_group.mean(dim=[1, 2], keepdim=True)  # Mean over the channel and spatial dimensions
-        var = x_group.var(dim=[1, 2], keepdim=True, unbiased=False)  # Variance over the channel and spatial dimensions
-
-        # Compute standard deviation and its inverse.
-        std = torch.sqrt(var + eps)
-        ivar = 1.0 / std
-        # Normalize the group using computed statistics.
-        xhat = (x_group - mu) / std
-        return xhat, (mu, ivar)
-
-    @staticmethod
-    def _compute_group_gradient(grad_output_group, normalized_group, gamma, mu, ivar):
-        # Retrieve total elements in the group (channels * spatial dimensions).
-        N, G_channels, G_spatial = grad_output_group.size()
-        G = G_channels * G_spatial
-
-        # Compute gradient of the normalized values with respect to the input.
-        d_normalized = grad_output_group * gamma.view(1, G_channels, 1)
-
-        # Cache this term as it's used multiple times
-        term = normalized_group - mu
-
-        # Gradient with respect to variance.
-        d_var = (-0.5 * ivar * (d_normalized * term).sum(dim=[1, 2], keepdim=True))
-
-        # Gradient with respect to mean.
-        d_mu = (-ivar * d_normalized.sum(dim=[1, 2], keepdim=True)) - 2.0 / G * d_var * term.sum(
-            dim=[1, 2], keepdim=True)
-
-        # Gradient with respect to input x.
-        grad_input = d_normalized * ivar + d_mu / G + 2.0 / G * term * d_var
-
-        return grad_input
-
-
-class VariableGroupNorm(nn.Module):
-
-    def __init__(self, num_channels, eps=1e-12):
+class VariableGroupNorm(torch.nn.Module):
+    def __init__(self, num_channels, group_sizes, eps=1e-5):
         super(VariableGroupNorm, self).__init__()
         self.num_channels = num_channels
         self.eps = eps
-        self.weight = nn.Parameter(torch.ones(num_channels))
-        self.bias = nn.Parameter(torch.zeros(num_channels))
+        self.group_sizes = group_sizes
+        # Calculate the number of groups
+        self.num_groups = len(group_sizes)
 
-    def forward(self, x, group_sizes):
-        return VariableGroupNormFunction.apply(x, self.weight, self.bias, group_sizes, self.eps)
+        # Initialize alpha and beta parameters for each group
+        self.weight = nn.Parameter(torch.ones(self.num_groups))
+        self.bias = nn.Parameter(torch.zeros(self.num_groups))
 
-    def extra_repr(self):
-        return '{num_channels}, group_sizes={group_sizes}, eps={eps}'.format(
-            **self.__dict__)
+        # Validate group sizes
+        assert sum(group_sizes) == num_channels, "Sum of group sizes must equal the number of channels"
 
+    def forward(self, x):
+        N, C, H, W = x.shape
+        x_flattened = x.view(N, C, -1)
 
-if __name__ == '__main__':
-    x = torch.randn(2, 6, 5, 5, dtype=torch.double, requires_grad=True)
-    weight = torch.randn(6, dtype=torch.double, requires_grad=True)
-    bias = torch.randn(6, dtype=torch.double, requires_grad=True)
-    group_sizes = torch.tensor([2, 2, 2], dtype=torch.int)
-    eps = 1e-5
+        # Pre-compute group boundaries
+        boundaries = [0] + torch.cumsum(torch.tensor(self.group_sizes), 0).tolist()
 
-    # Perform the gradient check
-    torch.autograd.gradcheck(VariableGroupNormFunction.apply, (x, weight, bias, group_sizes, eps), eps=1e-6, atol=1e-4, rtol=1e-3)
+        normalized_groups = []
+        for i, (start, end) in enumerate(zip(boundaries[:-1], boundaries[1:])):
+            x_group = x_flattened[:, start:end, :]
+
+            # Compute mean and variance for the group
+            mean = x_group.mean(dim=[1, 2], keepdim=True)
+            var = x_group.var(dim=[1, 2], keepdim=True, unbiased=False)
+
+            # Normalize
+            x_group_normalized = (x_group - mean) / torch.sqrt(var + self.eps)
+            normalized_groups.append(x_group_normalized)
+
+        # Concatenate all normalized groups
+        normalized_tensor = torch.cat(normalized_groups, dim=1)
+
+        # Assuming self.group_sizes is a list, convert it to a tensor correctly
+        group_sizes_tensor = torch.tensor(self.group_sizes, device=self.bias.device)
+
+        # Scale and shift using alphas and betas for each group
+        alphas_expanded = self.weight.repeat_interleave(group_sizes_tensor).view(1, C, 1)
+        betas_expanded = self.bias.repeat_interleave(group_sizes_tensor).view(1, C, 1)
+        out = normalized_tensor * alphas_expanded + betas_expanded
+        out = out.view(N, C, H, W)
+
+        return out
+
+    def set_group_sizes(self, group_sizes):
+        self.group_sizes = group_sizes

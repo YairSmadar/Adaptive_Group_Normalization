@@ -24,8 +24,11 @@ class SimilarityGroupNorm(Module):
                  ):
         super(SimilarityGroupNorm, self).__init__()
 
+        self.group_size = int(num_channels / num_groups)
+        self.cluster_sizes = torch.IntTensor([self.group_size] * num_groups)
+
         if use_VGN:
-            self.groupNorm = VariableGroupNorm(num_channels, eps=eps)
+            self.groupNorm = VariableGroupNorm(num_channels, self.cluster_sizes, eps=eps)
         else:
             self.groupNorm = GroupNorm(num_groups, num_channels, eps=eps,
                                        affine=True)
@@ -36,7 +39,6 @@ class SimilarityGroupNorm(Module):
         self.eval_reverse_indexes = None
         self.num_groups = num_groups
         self.num_channels = num_channels
-        self.group_size = int(num_channels / num_groups)
         self.shuff_thrs_std_only = shuff_thrs_std_only
         self.no_shuff_best_k_p = no_shuff_best_k_p
         self.std_threshold_l = std_threshold_l
@@ -53,7 +55,6 @@ class SimilarityGroupNorm(Module):
         self.eps = eps
         self.strategy = strategy
         self.recluster_num = 0
-        self.cluster_sizes = torch.IntTensor([self.group_size] * num_groups)
         self.use_VGN = use_VGN
 
         # those flags are updated in the AGN scheduler
@@ -64,7 +65,7 @@ class SimilarityGroupNorm(Module):
 
         # start shuffle at epoch > 0
         if self.use_gn:
-            return self.groupNorm(input_tensor, self.cluster_sizes) if self.use_VGN else self.groupNorm(input_tensor)
+            return self.groupNorm(input_tensor)
 
         if self.need_to_recluster:
             self.recluster(input_tensor)
@@ -72,7 +73,7 @@ class SimilarityGroupNorm(Module):
 
         # in case using shuffle last batch
         if self.indexes is None:
-            return self.groupNorm(input_tensor, self.cluster_sizes) if self.use_VGN else self.groupNorm(input_tensor)
+            return self.groupNorm(input_tensor)
 
         if self.training:
             indexes = self.indexes
@@ -83,7 +84,7 @@ class SimilarityGroupNorm(Module):
 
         reorder_input = reorder_channels(input_tensor, indexes, reverse_indexes)
 
-        norm_input = self.groupNorm(reorder_input, self.cluster_sizes) if self.use_VGN else self.groupNorm(reorder_input)
+        norm_input = self.groupNorm(reorder_input)
 
         ret = reorder_channels(norm_input, reverse_indexes, indexes)
 
@@ -100,6 +101,9 @@ class SimilarityGroupNorm(Module):
                 Conv_input.device)
 
         self.validate_new_indexes(Conv_input)
+
+        if self.use_VGN:
+            self.groupNorm.set_group_sizes(self.cluster_sizes)
 
     def SimilarityGroupNormClustering(self, channels_input):
         N, C, H, W = channels_input.size()
