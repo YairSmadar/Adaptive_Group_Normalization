@@ -30,8 +30,7 @@ class SimilarityGroupNorm(Module):
         if use_VGN:
             self.groupNorm = VariableGroupNorm(num_channels, self.cluster_sizes, eps=eps)
         else:
-            self.groupNorm = GroupNorm(num_groups, num_channels, eps=eps,
-                                       affine=True)
+            self.groupNorm = GroupNorm(num_groups, num_channels, eps=eps)
         self.indexes = None
         self.reverse_indexes = None
         self.groups_representation_num = None  # not used

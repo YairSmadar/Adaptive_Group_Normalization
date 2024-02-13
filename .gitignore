@@ -139,3 +139,4 @@ datasets/
 ResNet50/dataset/
 ResNet50/res/
 
+/agn_tests/data/MNIST/
