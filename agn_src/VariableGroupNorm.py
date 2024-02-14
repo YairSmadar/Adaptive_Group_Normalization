@@ -81,35 +81,32 @@ class VariableGroupNorm(torch.nn.Module):
         self.reverse_indexes = reverse_indexes
 
     def apply_shuffle_indexes(self) -> None:
-        if self.indexes is None:
-            raise Exception("The indexes must be assign before apply shuffle indexes")
+        with torch.no_grad():  # Temporarily disable gradient tracking
+            if self.indexes is None:
+                raise Exception("The indexes must be assign before apply shuffle indexes")
 
-        internal_indexes_per_image = self.indexes[:self.num_channels]
-        indexes_contain_all_channels_in_image = self.verify_tensor_contents(internal_indexes_per_image)
+            new_order = self.indexes[:self.num_channels].to(self.device)
+            indexes_contain_all_channels_in_image = self.verify_tensor_contents(new_order)
 
-        # in case the reverse_indexes doesn't assign yet
-        if self.reverse_indexes is not None:
-            internal_reverse_indexes_per_image = self.reverse_indexes[:self.num_channels]
-            reverse_indexes_contain_all_channels_in_image = self.verify_tensor_contents(
-                internal_reverse_indexes_per_image)
-        else:
-            internal_reverse_indexes_per_image = torch.arange(0, self.num_channels, dtype=torch.int64).to(self.device)
-            reverse_indexes_contain_all_channels_in_image = True
+            # in case the reverse_indexes doesn't assign yet
+            if self.reverse_indexes is not None:
+                original_order = self.reverse_indexes[:self.num_channels].to(self.device)
+                reverse_indexes_contain_all_channels_in_image = self.verify_tensor_contents(
+                    original_order)
+            else:
+                original_order = torch.arange(0, self.num_channels, dtype=torch.int64).to(self.device)
+                reverse_indexes_contain_all_channels_in_image = True
 
-        if indexes_contain_all_channels_in_image and reverse_indexes_contain_all_channels_in_image:
-            # First, return the weights and biases to the original order
-            self.weight = torch.nn.Parameter(
-                torch.index_select(self.weight, 0, internal_reverse_indexes_per_image)).to(self.device)
-            self.bias = torch.nn.Parameter(
-                torch.index_select(self.bias, 0, internal_reverse_indexes_per_image)).to(self.device)
+            if indexes_contain_all_channels_in_image and reverse_indexes_contain_all_channels_in_image:
+                # Reorder weights and biases using state_dict
+                gn_state_dict = self.state_dict()
+                gn_state_dict['weight'] = gn_state_dict['weight'][original_order][new_order]
+                gn_state_dict['bias'] = gn_state_dict['bias'][original_order][new_order]
 
-            # Then, reorder again according to the new indexes
-            self.weight = torch.nn.Parameter(
-                torch.index_select(self.weight, 0, internal_indexes_per_image)).to(self.device)
-            self.bias = torch.nn.Parameter(
-                torch.index_select(self.bias, 0, internal_indexes_per_image)).to(self.device)
-        else:
-            raise Exception("When using VGN, the re-clustering of the channels must be per image")
+                # Load the updated state_dict back to the GroupNorm layer
+                self.load_state_dict(gn_state_dict)
+            else:
+                raise Exception("When using VGN, the re-clustering of the channels must be per image")
 
     def verify_tensor_contents(self, tensor):
         N = self.num_channels
