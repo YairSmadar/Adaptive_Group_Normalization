@@ -99,6 +99,9 @@ class VariableGroupNorm(torch.nn.Module):
 
         if indexes_contain_all_channels_in_image and reverse_indexes_contain_all_channels_in_image:
 
+            print(f"self.weight device {self.weight}")
+            print(f"internal_reverse_indexes_per_image device {internal_reverse_indexes_per_image}")
+
             # First, return the weights and biases to the original order
             self.weight = torch.nn.Parameter(torch.index_select(self.weight, 0, internal_reverse_indexes_per_image)).to(self.device)
             self.bias = torch.nn.Parameter(torch.index_select(self.bias, 0, internal_reverse_indexes_per_image)).to(self.device)
