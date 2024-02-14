@@ -13,6 +13,9 @@ class VariableGroupNorm(torch.nn.Module):
         self.eps = eps
         self.group_sizes = group_sizes
 
+        self.indexes = None
+        self.reverse_indexes = None
+
         # Calculate the number of groups
         self.num_groups = len(group_sizes)
         self.affine = affine
@@ -55,6 +58,7 @@ class VariableGroupNorm(torch.nn.Module):
         # Note: Since weight and bias are now per channel, we can directly use them without needing to expand
         weight_expanded = self.weight.view(1, C, 1)
         bias_expanded = self.bias.view(1, C, 1)
+
         out = normalized_tensor * weight_expanded + bias_expanded
         out = out.view(N, C, H, W)
 
@@ -65,8 +69,56 @@ class VariableGroupNorm(torch.nn.Module):
             nn.init.ones_(self.weight)
             nn.init.zeros_(self.bias)
 
-    def set_group_sizes(self, group_sizes):
+    def set_group_sizes(self, group_sizes: torch.Tensor) -> None:
         self.group_sizes = group_sizes
+
+    def set_indexes(self, indexes: torch.Tensor) -> None:
+        self.indexes = indexes
+
+    def set_reverse_indexes(self, reverse_indexes: torch.Tensor) -> None:
+        self.reverse_indexes = reverse_indexes
+
+    def apply_shuffle_indexes(self) -> None:
+        if self.indexes is None:
+            raise Exception("The indexes must be assign before apply shuffle indexes")
+
+        internal_indexes_per_image = self.indexes[:self.num_channels]
+        indexes_contain_all_channels_in_image = self.verify_tensor_contents(internal_indexes_per_image)
+
+        # in case the reverse_indexes doesn't assign yet
+        if self.reverse_indexes is not None:
+            internal_reverse_indexes_per_image = self.reverse_indexes[:self.num_channels]
+            reverse_indexes_contain_all_channels_in_image = self.verify_tensor_contents(
+                internal_reverse_indexes_per_image)
+        else:
+            internal_reverse_indexes_per_image = torch.arange(0, self.num_channels, dtype=torch.int64)
+            reverse_indexes_contain_all_channels_in_image = True
+
+        if indexes_contain_all_channels_in_image and reverse_indexes_contain_all_channels_in_image:
+
+            # First, return the weights and biases to the original order
+            self.weight = torch.nn.Parameter(torch.index_select(self.weight, 0, internal_reverse_indexes_per_image))
+            self.bias = torch.nn.Parameter(torch.index_select(self.bias, 0, internal_reverse_indexes_per_image))
+
+            # Then, reorder again according to the new indexes
+            self.weight = torch.nn.Parameter(torch.index_select(self.weight, 0, internal_indexes_per_image))
+            self.bias = torch.nn.Parameter(torch.index_select(self.bias, 0, internal_indexes_per_image))
+        else:
+            raise Exception("When using VGN, the re-clustering of the channels must be per image")
+
+    def verify_tensor_contents(self, tensor):
+        N = self.num_channels
+
+        # Check length
+        if len(tensor) != N:
+            return False
+
+        # Check for uniqueness and range
+        unique_elements = torch.unique(tensor)
+        if len(unique_elements) == N and unique_elements.min() == 0 and unique_elements.max() == N - 1:
+            return True
+        else:
+            return False
 
 # if __name__ == '__main__':
 #     # Assume VariableGroupNorm is defined as provided earlier

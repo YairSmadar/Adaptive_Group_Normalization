@@ -103,6 +103,9 @@ class SimilarityGroupNorm(Module):
 
         if self.use_VGN:
             self.groupNorm.set_group_sizes(self.cluster_sizes)
+            self.groupNorm.set_indexes(self.indexes)
+            self.groupNorm.apply_shuffle_indexes()
+            self.groupNorm.set_reverse_indexes(self.reverse_indexes)
 
     def SimilarityGroupNormClustering(self, channels_input):
         N, C, H, W = channels_input.size()
