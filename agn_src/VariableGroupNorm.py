@@ -28,7 +28,6 @@ class VariableGroupNorm(torch.nn.Module):
             self.register_parameter('bias', None)
 
         self.device = self.weight.device
-        print(self.device)
 
         self.reset_parameters()
 
