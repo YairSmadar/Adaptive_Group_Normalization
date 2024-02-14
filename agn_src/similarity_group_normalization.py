@@ -97,6 +97,7 @@ class SimilarityGroupNorm(Module):
         # updating self.indexes
         self.SimilarityGroupNormClustering(clone(Conv_input))
 
+        print(f'2 Conv_input device = {Conv_input.device}')
         if self.indexes is not None:
             self.reverse_indexes = torch.argsort(self.indexes).to(
                 Conv_input.device)
@@ -208,6 +209,8 @@ class SimilarityGroupNorm(Module):
                                               channelsClustering)
 
         self.indexes = channelsClustering.to(device=channels_input.device, dtype=torch.int64)
+        print(f'indexes device = {self.indexes.device}')
+
 
     def validate_new_indexes(self, conv_input):
         N, C, _, _ = conv_input.size()
