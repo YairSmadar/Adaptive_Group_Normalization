@@ -27,6 +27,9 @@ class VariableGroupNorm(torch.nn.Module):
             self.register_parameter('weight', None)
             self.register_parameter('bias', None)
 
+        self.device = self.weight.device
+        print(self.device)
+
         self.reset_parameters()
 
         # Validate group sizes
@@ -97,12 +100,12 @@ class VariableGroupNorm(torch.nn.Module):
         if indexes_contain_all_channels_in_image and reverse_indexes_contain_all_channels_in_image:
 
             # First, return the weights and biases to the original order
-            self.weight = torch.nn.Parameter(torch.index_select(self.weight, 0, internal_reverse_indexes_per_image))
-            self.bias = torch.nn.Parameter(torch.index_select(self.bias, 0, internal_reverse_indexes_per_image))
+            self.weight = torch.nn.Parameter(torch.index_select(self.weight, 0, internal_reverse_indexes_per_image)).to(self.device)
+            self.bias = torch.nn.Parameter(torch.index_select(self.bias, 0, internal_reverse_indexes_per_image)).to(self.device)
 
             # Then, reorder again according to the new indexes
-            self.weight = torch.nn.Parameter(torch.index_select(self.weight, 0, internal_indexes_per_image))
-            self.bias = torch.nn.Parameter(torch.index_select(self.bias, 0, internal_indexes_per_image))
+            self.weight = torch.nn.Parameter(torch.index_select(self.weight, 0, internal_indexes_per_image)).to(self.device)
+            self.bias = torch.nn.Parameter(torch.index_select(self.bias, 0, internal_indexes_per_image)).to(self.device)
         else:
             raise Exception("When using VGN, the re-clustering of the channels must be per image")
 
