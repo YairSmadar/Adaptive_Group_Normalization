@@ -94,21 +94,21 @@ class VariableGroupNorm(torch.nn.Module):
             reverse_indexes_contain_all_channels_in_image = self.verify_tensor_contents(
                 internal_reverse_indexes_per_image)
         else:
-            internal_reverse_indexes_per_image = torch.arange(0, self.num_channels, dtype=torch.int64)
+            internal_reverse_indexes_per_image = torch.arange(0, self.num_channels, dtype=torch.int64).to(self.device)
             reverse_indexes_contain_all_channels_in_image = True
 
         if indexes_contain_all_channels_in_image and reverse_indexes_contain_all_channels_in_image:
-
-            print(f"self.weight device {self.weight.device}")
-            print(f"internal_reverse_indexes_per_image device {internal_reverse_indexes_per_image.device}")
-
             # First, return the weights and biases to the original order
-            self.weight = torch.nn.Parameter(torch.index_select(self.weight, 0, internal_reverse_indexes_per_image)).to(self.device)
-            self.bias = torch.nn.Parameter(torch.index_select(self.bias, 0, internal_reverse_indexes_per_image)).to(self.device)
+            self.weight = torch.nn.Parameter(
+                torch.index_select(self.weight, 0, internal_reverse_indexes_per_image)).to(self.device)
+            self.bias = torch.nn.Parameter(
+                torch.index_select(self.bias, 0, internal_reverse_indexes_per_image)).to(self.device)
 
             # Then, reorder again according to the new indexes
-            self.weight = torch.nn.Parameter(torch.index_select(self.weight, 0, internal_indexes_per_image)).to(self.device)
-            self.bias = torch.nn.Parameter(torch.index_select(self.bias, 0, internal_indexes_per_image)).to(self.device)
+            self.weight = torch.nn.Parameter(
+                torch.index_select(self.weight, 0, internal_indexes_per_image)).to(self.device)
+            self.bias = torch.nn.Parameter(
+                torch.index_select(self.bias, 0, internal_indexes_per_image)).to(self.device)
         else:
             raise Exception("When using VGN, the re-clustering of the channels must be per image")
 
