@@ -207,7 +207,7 @@ class SimilarityGroupNorm(Module):
         self.get_channels_clustering_for_eval(channels_input,
                                               channelsClustering)
 
-        self.indexes = channelsClustering.to(dtype=torch.int64)
+        self.indexes = channelsClustering.to(device=channels_input.device, dtype=torch.int64)
 
     def validate_new_indexes(self, conv_input):
         N, C, _, _ = conv_input.size()
