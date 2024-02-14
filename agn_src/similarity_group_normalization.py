@@ -24,11 +24,13 @@ class SimilarityGroupNorm(Module):
                  ):
         super(SimilarityGroupNorm, self).__init__()
 
+        device_name = 'cuda' if torch.cuda.is_available() else 'cpu'
+
         self.group_size = int(num_channels / num_groups)
         self.cluster_sizes = torch.IntTensor([self.group_size] * num_groups)
 
         if use_VGN:
-            self.groupNorm = VariableGroupNorm(num_channels, self.cluster_sizes, eps=eps)
+            self.groupNorm = VariableGroupNorm(num_channels, self.cluster_sizes, eps=eps, device=device_name)
         else:
             self.groupNorm = GroupNorm(num_groups, num_channels, eps=eps)
         self.indexes = None
