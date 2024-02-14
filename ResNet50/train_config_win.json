@@ -2,7 +2,7 @@
   "model_version": 1,
   "SGN_version": 14,
   "RGN_version": 2,
-  "use_VGN": true,
+  "use_VGN": false,
   "VGN_min_gs_mul": 0.8,
   "VGN_max_gs_mul": 1.2,
   "load": "init_weights\\W1.pt",

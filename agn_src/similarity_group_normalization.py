@@ -98,16 +98,41 @@ class SimilarityGroupNorm(Module):
         self.SimilarityGroupNormClustering(clone(Conv_input))
 
         if self.indexes is not None:
+            last_reverse_indexes = self.reverse_indexes
             self.reverse_indexes = torch.argsort(self.indexes).to(
                 Conv_input.device)
 
-        self.validate_new_indexes(Conv_input)
+            if self.use_VGN:
+                self.groupNorm.set_group_sizes(self.cluster_sizes)
+                self.groupNorm.set_indexes(self.indexes)
+                self.groupNorm.apply_shuffle_indexes()
+                self.groupNorm.set_reverse_indexes(self.reverse_indexes)
+            else:
+                weights = self.groupNorm.weight
+                biases = self.groupNorm.bias
 
-        if self.use_VGN:
-            self.groupNorm.set_group_sizes(self.cluster_sizes)
-            self.groupNorm.set_indexes(self.indexes)
-            self.groupNorm.apply_shuffle_indexes()
-            self.groupNorm.set_reverse_indexes(self.reverse_indexes)
+                if last_reverse_indexes is None:
+                    last_reverse_indexes = torch.arange(0, self.num_channels, dtype=torch.int64).to(Conv_input.device)
+
+                internal_reverse_indexes_per_image = last_reverse_indexes[:self.num_channels]
+                internal_indexes_per_image = self.indexes[:self.num_channels]
+
+                # First, return the weights and biases to the original order
+                weights = torch.nn.Parameter(
+                    torch.index_select(weights, 0, internal_reverse_indexes_per_image)).to(weights.device)
+                biases = torch.nn.Parameter(
+                    torch.index_select(biases, 0, internal_reverse_indexes_per_image)).to(biases.device)
+
+                # Then, reorder again according to the new indexes
+                weights = torch.nn.Parameter(
+                    torch.index_select(weights, 0, internal_indexes_per_image)).to(weights.device)
+                biases = torch.nn.Parameter(
+                    torch.index_select(biases, 0, internal_indexes_per_image)).to(biases.device)
+
+                self.groupNorm.weight = weights
+                self.groupNorm.bias = biases
+
+        self.validate_new_indexes(Conv_input)
 
     def SimilarityGroupNormClustering(self, channels_input):
         N, C, H, W = channels_input.size()
