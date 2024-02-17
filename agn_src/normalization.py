@@ -1,4 +1,8 @@
-from torch.nn import BatchNorm2d, GroupNorm, LayerNorm
+from torch.nn import BatchNorm2d, LayerNorm
+if True:
+    from agn_src.GroupNormMyImpl import GroupNormMyImpl as GroupNorm
+else:
+    from torch.nn import GroupNorm
 from agn_src.random_group_normalization import RandomGroupNorm as rgn
 from agn_src.similarity_group_normalization import SimilarityGroupNorm as sgn
 import agn_src.similarity_group_normalization as similarity_group_normalization
