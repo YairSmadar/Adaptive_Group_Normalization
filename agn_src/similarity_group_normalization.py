@@ -2,8 +2,13 @@ import math
 import numpy as np
 import torch
 from torch import clone, tensor, sort, zeros_like, cat, ceil, floor
-from torch.nn import Module, GroupNorm
+import torch.nn as nn
 import heapq
+
+if True:
+    from agn_src.GroupNormMyImpl import GroupNormMyImpl as GroupNorm
+else:
+    from torch.nn import GroupNorm
 from scipy.cluster.hierarchy import linkage, leaves_list
 from k_means_constrained import KMeansConstrained
 from sklearn.ensemble import IsolationForest
@@ -14,7 +19,7 @@ from agn_src.VariableGroupNorm import VariableGroupNorm
 from agn_utils.reorder_channels import reorder_channels
 
 
-class SimilarityGroupNorm(Module):
+class SimilarityGroupNorm(nn.Module):
     def __init__(self, num_groups: int, num_channels: int = 32, strategy=None,
                  version: int = 14, eps=1e-12, no_shuff_best_k_p: float = 0.1,
                  shuff_thrs_std_only: int = False,
