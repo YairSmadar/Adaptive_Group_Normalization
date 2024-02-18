@@ -57,7 +57,6 @@ class VariableGroupNorm(torch.nn.Module):
         normalized_tensor = torch.cat(normalized_groups, dim=1)
 
         # Scale and shift using weight and bias for each channel
-        # Note: Since weight and bias are now per channel, we can directly use them without needing to expand
         weight_expanded = self.weight.view(1, C, 1)
         bias_expanded = self.bias.view(1, C, 1)
 

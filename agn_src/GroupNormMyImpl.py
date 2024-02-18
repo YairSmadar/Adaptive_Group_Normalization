@@ -33,27 +33,27 @@ class GroupNormMyImpl(nn.Module):
             nn.init.zeros_(self.bias)
 
     def forward(self, x):
-        """
-        Forward pass of the GroupNorm.
-
-        Parameters:
-        - x: input tensor of shape (N, C, H, W) where N is the batch size, C is the channel size,
-             H and W are the spatial dimensions.
-
-        Returns:
-        - The normalized tensor.
-        """
         N, C, H, W = x.size()
         G = self.num_groups
-        assert C % G == 0, 'num_features must be divisible by num_groups'
+        assert C % G == 0, 'The number of channels must be divisible by the number of groups.'
 
+        # Reshape for group normalization
         x = x.view(N, G, C // G, H, W)
+        # X = x.clone()  # Preserve X for computing dX during backpropagation if necessary
+
         mean = x.mean(dim=(2, 3, 4), keepdim=True)
         var = x.var(dim=(2, 3, 4), keepdim=True)
-        x = (x - mean) / (var + self.eps).sqrt()
-        x = x.view(N, C, H, W)
+        rstd = 1 / (var + self.eps).sqrt()
+
+        # Normalize
+        x = (x - mean) * rstd
 
         if self.affine:
-            x = x * self.weight.view(1, C, 1, 1) + self.bias.view(1, C, 1, 1)
+            weight = self.weight.view(1, G, C // G, 1, 1)
+            bias = self.bias.view(1, G, C // G, 1, 1)
+            x = x * weight + bias
+
+        # Reshape back to the original shape
+        x = x.view(N, C, H, W)
 
         return x
