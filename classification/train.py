@@ -46,6 +46,13 @@ def main():
         wandb.run.summary["best_test_accuracy"] = 0
         wandb.run.summary["best_test_loss"] = 999
 
+    if torch.cuda.is_available():
+        print("CUDA is available. Setting CUDA device.")
+        torch.cuda.set_device(args.device)  # To use the first GPU
+    else:
+        print("CUDA is not available.")
+
+
     # print parameters
     global_vars.printParameters()
 

@@ -128,7 +128,7 @@ parser.add_argument('--VGN_max_gs_mul', default=1, type=float,
                     help="maximum multiply value for the group size in the VGN")
 parser.add_argument('--VGN_min_gs_mul', default=1, type=float,
                     help="minimum multiply value for the group size in the VGN")
-
+parser.add_argument('--device', default=0, type=int, help='GPU number list (only if cuda available')
 
 def apply_config(args: Namespace, config_path: str):
     """Overwrite the values in an arguments object by values of namesake
