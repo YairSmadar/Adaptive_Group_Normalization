@@ -48,7 +48,7 @@ import numpy as np
 
 def getLoaders(datasetName, gen):
     reclustringLoader = None
-    if datasetName == 'CIFAR100':
+    if datasetName == 'cifar100':
         CIFAR100_normalize = Normalize(mean=[0.5071, 0.4867, 0.4408], std=[0.2675, 0.2565, 0.2761])
         train_transform = Compose([RandomHorizontalFlip(), ToTensor(), CIFAR100_normalize])
         test_transform = Compose([ToTensor(), CIFAR100_normalize])

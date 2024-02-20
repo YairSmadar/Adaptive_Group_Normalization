@@ -6,7 +6,6 @@ from copy import deepcopy
 from os.path import isfile
 from time import time
 from numpy.random import seed as seed1
-from resnet import resnet50
 from scedulers import SchedulerManager
 from data_loading import getLoaders
 
@@ -17,8 +16,6 @@ from torch.nn import CrossEntropyLoss, DataParallel
 from torch.optim import SGD
 import torch
 
-from agn_src.agn_scheduler import AGNScheduler
-
 seed1(global_vars.args.seed)
 seed2(global_vars.args.seed)
 if is_available():
@@ -26,6 +23,9 @@ if is_available():
 deterministic = True
 benchmark = False
 use_deterministic_algorithms(True)
+
+from agn_src.agn_scheduler import AGNScheduler
+from models.models_maneger import ModelsManeger
 
 
 def main():
@@ -50,30 +50,39 @@ def main():
 
     normalization_args = \
         {
-            "version": args.SGN_version if args.method == 'SGN' else args.RGN_version,
-            "norm_factory_args":
+            "normalization_args":
                 {
-                    "method": args.method,
-                    "group_by_size": args.group_by_size,
-                    "group_norm_size": args.group_norm_size,
-                    "group_norm": args.group_norm,
-                    "plot_groups": args.plot_groups,
-                },
-            "SGN_args":
-                {
-                    "eps": args.eps,
-                    "no_shuff_best_k_p": args.no_shuff_best_k_p,
-                    "shuff_thrs_std_only": args.shuff_thrs_std_only,
-                    "std_threshold_l": args.std_threshold_l,
-                    "std_threshold_h": args.std_threshold_h,
-                    "keep_best_group_num_start": args.keep_best_group_num_start,
-                    "use_VGN": args.use_VGN,
-                    "VGN_min_gs_mul": args.VGN_min_gs_mul,
-                    "VGN_max_gs_mul": args.VGN_max_gs_mul
-                },
+                    "version": args.SGN_version if args.method == 'SGN' else args.RGN_version,
+                    "norm_factory_args":
+                        {
+                            "method": args.method,
+                            "group_by_size": args.group_by_size,
+                            "group_norm_size": args.group_norm_size,
+                            "group_norm": args.group_norm,
+                            "plot_groups": args.plot_groups,
+                        },
+                    "SGN_args":
+                        {
+                            "eps": args.eps,
+                            "no_shuff_best_k_p": args.no_shuff_best_k_p,
+                            "shuff_thrs_std_only": args.shuff_thrs_std_only,
+                            "std_threshold_l": args.std_threshold_l,
+                            "std_threshold_h": args.std_threshold_h,
+                            "keep_best_group_num_start": args.keep_best_group_num_start,
+                            "use_VGN": args.use_VGN,
+                            "VGN_min_gs_mul": args.VGN_min_gs_mul,
+                            "VGN_max_gs_mul": args.VGN_max_gs_mul
+                        },
+                }
         }
 
-    model = resnet50(normalization_args=normalization_args)
+    setting_args = {'n_class': len(train_loader.dataset.classes),
+                    'input_size': train_loader.dataset.data.shape[1],
+                    'width_mult': 1}
+
+    model_args = {**normalization_args, **setting_args}
+
+    model = ModelsManeger.get_model(model_name=args.arch, args=model_args)
     model = DataParallel(model).to(global_vars.device)
 
     # define loss function (criterion) and optimizer

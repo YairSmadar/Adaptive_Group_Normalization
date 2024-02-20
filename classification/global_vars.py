@@ -14,8 +14,8 @@ import os
 max_norm_shuffle_DEAFULT = 1000
 
 parser = ArgumentParser(description='PyTorch GN\AGN Training')
-parser.add_argument('--dataset', default="CIFAR100", type=str,
-                    help='the dataset which we learn on (default: CIFAR100)')
+parser.add_argument('--dataset', default="cifar100", type=str,
+                    help='the dataset which we learn on (default: cifar100)')
 parser.add_argument('--arch', '-a', metavar='ARCH', default='resnet50',
                     help='model architecture (default: resnet50)')
 parser.add_argument('--method', default="GN", type=str,

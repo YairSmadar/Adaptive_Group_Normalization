@@ -101,7 +101,6 @@ class VariableGroupNorm(torch.nn.Module):
                 gn_state_dict = self.state_dict()
                 gn_state_dict['weight'] = gn_state_dict['weight'][original_order][new_order]
                 gn_state_dict['bias'] = gn_state_dict['bias'][original_order][new_order]
-
                 # Load the updated state_dict back to the GroupNorm layer
                 self.load_state_dict(gn_state_dict)
             else:

@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 import global_vars
-from resnet import resnet50
+from classification.models.resnet50 import resnet50
 from scedulers import SchedulerManager
 
 import torch

@@ -140,3 +140,23 @@ ResNet50/dataset/
 ResNet50/res/
 
 /agn_tests/data/MNIST/
+/classification/dataset/test/cifar-100-python/meta
+/classification/dataset/test/cifar-100-python/test
+/classification/dataset/test/cifar-100-python/train
+/classification/dataset/test/cifar-100-python.tar.gz
+/classification/dataset/train/cifar-100-python/meta
+/classification/dataset/train/cifar-100-python/test
+/classification/dataset/train/cifar-100-python/train
+/classification/dataset/train/cifar-100-python.tar.gz
+/classification/res/config_GN.json
+/classification/res/config_SGN_V8.json
+/classification/res/config_SGN_V14.json
+/classification/res/resnet50_SGNV141_16b_0.01lr_0.9m_32groupsize_1reclustringinarow_1e-12eps_0seed_70maxreclustring_default.tar
+/classification/res/resnet50_SGNV1410_16b_0.01lr_0.9m_32groupsize_1reclustringinarow_1e-12eps_0seed_70maxreclustring_default.tar
+/classification/saved_models/config_SGN_V14.json
+/classification/saved_models/mobilenetv2_SGNV1420_16b_0.01lr_0.9m_32groupsize_1reclustringinarow_1e-12eps_0seed_50maxreclustring_default.tar
+/classification/wandb/run-20240220_115938-gpobfabp/files/config.yaml
+/classification/wandb/run-20240220_115938-gpobfabp/files/requirements.txt
+/classification/wandb/run-20240220_115938-gpobfabp/files/wandb-metadata.json
+/classification/wandb/run-20240220_115938-gpobfabp/files/wandb-summary.json
+/classification/wandb/run-20240220_115938-gpobfabp/run-gpobfabp.wandb
