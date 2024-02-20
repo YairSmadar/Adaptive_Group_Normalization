@@ -5,7 +5,7 @@ import sys
 import classification.global_vars as global_vars
 
 # Add the project's root directory to sys.path
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
 sys.path.append(project_root)
 
 from agn_src.normalization import NormalizationFactory
