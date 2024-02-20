@@ -24,6 +24,13 @@ deterministic = True
 benchmark = False
 use_deterministic_algorithms(True)
 
+import os
+import sys
+
+# Add the project's root directory to sys.path
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+sys.path.append(project_root)
+
 from agn_src.agn_scheduler import AGNScheduler
 from models.models_maneger import ModelsManeger
 
