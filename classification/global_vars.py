@@ -297,24 +297,25 @@ def init_saveing_path():
 
 
 def generate_wandb_name():
-    wanda_test_name = f"{args.method}"
+    wanda_test_name = f"{args.arch}_{args.dataset}"
+    wanda_test_name += f"_{args.method}"
 
     if is_agn:
         if args.method == 'RGN':
-            wanda_test_name += f'_V{args.RGN_version}'
+            wanda_test_name += f'-V{args.RGN_version}'
         else:
-            wanda_test_name += f'_V{args.SGN_version}'
+            wanda_test_name += f'-V{args.SGN_version}'
 
         if args.use_VGN:
             wanda_test_name += f'_use-VGN'
 
         if args.epoch_start_cluster != 0:
-            wanda_test_name += f'_epoch-start-cluster-{args.epoch_start_cluster}'
+            wanda_test_name += f'_start-{args.epoch_start_cluster}'
 
-        wanda_test_name += f'_shuff-every-ep-{args.norm_shuffle}'
+        wanda_test_name += f'_every-{args.norm_shuffle}'
 
         if args.max_norm_shuffle != max_norm_shuffle_DEAFULT:
-            wanda_test_name += f'_max-shuff-{args.max_norm_shuffle}'
+            wanda_test_name += f'_max-{args.max_norm_shuffle}'
 
         if args.no_shuff_best_k_p != 1.0:
             wanda_test_name += f'_ns-{args.no_shuff_best_k_p}'
@@ -325,7 +326,6 @@ def generate_wandb_name():
                 wanda_test_name += f'_sto-{args.std_threshold_l}-{args.std_threshold_h}'
             else:
                 wanda_test_name += f'_sto-{args.std_threshold_h}'
-
 
     wanda_test_name += f'_bs-{args.batch_size}'
 
@@ -339,6 +339,8 @@ def generate_wandb_name():
 
     if args.load:
         wanda_test_name += f'_{os.path.splitext(os.path.basename(args.load))[0]}'
+    else:
+        wanda_test_name += f'_seed-{args.seed}'
 
     return wanda_test_name
 

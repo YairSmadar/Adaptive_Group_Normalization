@@ -1,5 +1,5 @@
 from torch.nn import BatchNorm2d, LayerNorm
-if True:
+if False:
     from agn_src.GroupNormMyImpl import GroupNormMyImpl as GroupNorm
 else:
     from torch.nn import GroupNorm

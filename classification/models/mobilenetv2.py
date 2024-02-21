@@ -1,19 +1,21 @@
 import torch.nn as nn
 import math
+from agn_src.normalization import NormalizationFactory
+from agn_src.random_group_normalization import RandomGroupNorm as rgn
+from agn_src.similarity_group_normalization import SimilarityGroupNorm as sgn
 
-
-def conv_bn(inp, oup, stride):
+def conv_bn(inp, oup, stride, normalization_factory):
     return nn.Sequential(
         nn.Conv2d(inp, oup, 3, stride, 1, bias=False),
-        nn.BatchNorm2d(oup),
+        normalization_factory.create_norm2d(oup),
         nn.ReLU6(inplace=True)
     )
 
 
-def conv_1x1_bn(inp, oup):
+def conv_1x1_bn(inp, oup, normalization_factory):
     return nn.Sequential(
         nn.Conv2d(inp, oup, 1, 1, 0, bias=False),
-        nn.BatchNorm2d(oup),
+        normalization_factory.create_norm2d(oup),
         nn.ReLU6(inplace=True)
     )
 
@@ -24,7 +26,7 @@ def make_divisible(x, divisible_by=8):
 
 
 class InvertedResidual(nn.Module):
-    def __init__(self, inp, oup, stride, expand_ratio):
+    def __init__(self, inp, oup, stride, expand_ratio, normalization_factory):
         super(InvertedResidual, self).__init__()
         self.stride = stride
         assert stride in [1, 2]
@@ -36,25 +38,25 @@ class InvertedResidual(nn.Module):
             self.conv = nn.Sequential(
                 # dw
                 nn.Conv2d(hidden_dim, hidden_dim, 3, stride, 1, groups=hidden_dim, bias=False),
-                nn.BatchNorm2d(hidden_dim),
+                normalization_factory.create_norm2d(hidden_dim),
                 nn.ReLU6(inplace=True),
                 # pw-linear
                 nn.Conv2d(hidden_dim, oup, 1, 1, 0, bias=False),
-                nn.BatchNorm2d(oup),
+                normalization_factory.create_norm2d(oup),
             )
         else:
             self.conv = nn.Sequential(
                 # pw
                 nn.Conv2d(inp, hidden_dim, 1, 1, 0, bias=False),
-                nn.BatchNorm2d(hidden_dim),
+                normalization_factory.create_norm2d(hidden_dim),
                 nn.ReLU6(inplace=True),
                 # dw
                 nn.Conv2d(hidden_dim, hidden_dim, 3, stride, 1, groups=hidden_dim, bias=False),
-                nn.BatchNorm2d(hidden_dim),
+                normalization_factory.create_norm2d(hidden_dim),
                 nn.ReLU6(inplace=True),
                 # pw-linear
                 nn.Conv2d(hidden_dim, oup, 1, 1, 0, bias=False),
-                nn.BatchNorm2d(oup),
+                normalization_factory.create_norm2d(oup),
             )
 
     def forward(self, x):
@@ -65,7 +67,7 @@ class InvertedResidual(nn.Module):
 
 
 class MobileNetV2(nn.Module):
-    def __init__(self, normalization_args: dict, n_class=100, input_size=32, width_mult=1):
+    def __init__(self, normalization_args: dict, n_class=100, input_size=32, width_mult=16):
         super(MobileNetV2, self).__init__()
         block = InvertedResidual
         input_channel = 32
@@ -81,22 +83,26 @@ class MobileNetV2(nn.Module):
             [6, 320, 1, 1],
         ]
 
+        self.normalization_factory = NormalizationFactory(normalization_args['version'],
+                                                          **normalization_args['norm_factory_args'],
+                                                          **normalization_args['SGN_args'])
+
         # building first layer
         assert input_size % 32 == 0
         # input_channel = make_divisible(input_channel * width_mult)  # first channel is always 32!
         self.last_channel = make_divisible(last_channel * width_mult) if width_mult > 1.0 else last_channel
-        self.features = [conv_bn(3, input_channel, 2)]
+        self.features = [conv_bn(3, input_channel, 2, self.normalization_factory)]
         # building inverted residual blocks
         for t, c, n, s in interverted_residual_setting:
             output_channel = make_divisible(c * width_mult) if t > 1 else c
             for i in range(n):
                 if i == 0:
-                    self.features.append(block(input_channel, output_channel, s, expand_ratio=t))
+                    self.features.append(block(input_channel, output_channel, s, expand_ratio=t, normalization_factory=self.normalization_factory))
                 else:
-                    self.features.append(block(input_channel, output_channel, 1, expand_ratio=t))
+                    self.features.append(block(input_channel, output_channel, 1, expand_ratio=t, normalization_factory=self.normalization_factory))
                 input_channel = output_channel
         # building last several layers
-        self.features.append(conv_1x1_bn(input_channel, self.last_channel))
+        self.features.append(conv_1x1_bn(input_channel, self.last_channel, normalization_factory=self.normalization_factory))
         # make it nn.Sequential
         self.features = nn.Sequential(*self.features)
 
@@ -125,6 +131,15 @@ class MobileNetV2(nn.Module):
                 n = m.weight.size(1)
                 m.weight.data.normal_(0, 0.01)
                 m.bias.data.zero_()
+            elif isinstance(m, nn.GroupNorm):
+                m.weight.data.fill_(1)
+                m.bias.data.zero_()
+            elif isinstance(m, rgn):
+                m.groupNorm.weight.data.fill_(1)
+                m.groupNorm.bias.data.zero_()
+            elif isinstance(m, sgn):
+                m.groupNorm.weight.data.fill_(1)
+                m.groupNorm.bias.data.zero_()
 
 
 def mobilenet_v2(args, pretrained=False):

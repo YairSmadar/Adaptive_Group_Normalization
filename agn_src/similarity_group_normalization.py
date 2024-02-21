@@ -5,7 +5,7 @@ from torch import clone, tensor, sort, zeros_like, cat, ceil, floor
 import torch.nn as nn
 import heapq
 
-if True:
+if False:
     from agn_src.GroupNormMyImpl import GroupNormMyImpl as GroupNorm
 else:
     from torch.nn import GroupNorm

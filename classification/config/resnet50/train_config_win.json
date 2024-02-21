@@ -20,7 +20,7 @@
   "seed": 0,
   "group_by_size": true,
   "use_wandb": false,
-  "group_norm_size": 32,
+  "group_norm_size": 16,
   "plot_groups": false,
   "epoch_start_cluster": 0,
   "max_norm_shuffle": 70,

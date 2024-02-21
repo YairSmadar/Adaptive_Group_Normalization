@@ -20,7 +20,7 @@
   "saveing_path": "saved_models/",
   "seed": 0,
   "group_by_size": true,
-  "group_norm_size": 32,
+  "group_norm_size": 16,
   "use_wandb": true,
   "scheduler_name": "default",
   "classes_to_train":
