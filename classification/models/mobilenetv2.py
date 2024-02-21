@@ -67,7 +67,7 @@ class InvertedResidual(nn.Module):
 
 
 class MobileNetV2(nn.Module):
-    def __init__(self, normalization_args: dict, n_class=100, input_size=32, width_mult=16):
+    def __init__(self, normalization_args: dict, n_class=100, input_size=32, width_mult=1):
         super(MobileNetV2, self).__init__()
         block = InvertedResidual
         input_channel = 32
