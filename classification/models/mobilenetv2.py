@@ -79,9 +79,14 @@ class MobileNetV2(nn.Module):
             [6, 32, 3, 2],
             [6, 64, 4, 2],
             [6, 96, 3, 1],
-            [6, 160, 3, 2],
-            [6, 320, 1, 1],
+            # [6, 160, 3, 2],
+            # [6, 320, 1, 1],
         ]
+
+        if input_size > 32:
+            interverted_residual_setting.append([6, 160, 3, 2])
+            interverted_residual_setting.append([6, 320, 1, 1])
+
 
         self.normalization_factory = NormalizationFactory(normalization_args['version'],
                                                           **normalization_args['norm_factory_args'],
