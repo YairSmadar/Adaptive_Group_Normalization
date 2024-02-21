@@ -327,7 +327,7 @@ class ClusteringStrategy(ABC):
         self.num_channels = num_channels
         self.group_size = int(num_channels / num_groups)
         if use_VGN:
-            self.min_group_size = np.ceil(self.group_size*VGN_min_gs_mul)
+            self.min_group_size = np.floor(self.group_size*VGN_min_gs_mul)
             self.max_group_size = np.ceil(self.group_size*VGN_max_gs_mul)
         else:
             self.min_group_size = self.group_size
@@ -468,11 +468,11 @@ class ClusteringStrategy(ABC):
         # Create a 2D tensor where each row is a channel
         # and the columns are the mean and variance
         channel_stats = torch.stack((channel_means, channel_vars), dim=1)
-
+        num_of_ch = channel_means.shape[0]
         # Perform constrained k-means clustering on the channel statistics
         kmeans = KMeansConstrained(n_clusters=self.filtered_num_groups,
                                    size_min=self.min_group_size,
-                                   size_max=self.max_group_size,
+                                   size_max=np.min([self.max_group_size, num_of_ch]),
                                    random_state=0)
         kmeans.fit(channel_stats.cpu().detach().numpy())
 
