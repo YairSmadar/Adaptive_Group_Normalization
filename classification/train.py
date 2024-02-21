@@ -15,6 +15,7 @@ from torch.cuda import is_available, manual_seed as seed3
 from torch.nn import CrossEntropyLoss, DataParallel
 from torch.optim import SGD
 import torch
+from torchsummary import summary
 
 seed1(global_vars.args.seed)
 seed2(global_vars.args.seed)
@@ -97,6 +98,8 @@ def main():
     model_args = {**normalization_args, **setting_args}
 
     model = ModelsManeger.get_model(model_name=args.arch, args=model_args)
+    N, H, W, C = train_loader.dataset.data.shape
+    summary(model, (C, H, W))
     model = DataParallel(model).to(global_vars.device)
 
     # define loss function (criterion) and optimizer
