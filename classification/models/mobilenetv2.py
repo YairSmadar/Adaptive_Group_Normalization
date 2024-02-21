@@ -87,7 +87,6 @@ class MobileNetV2(nn.Module):
             interverted_residual_setting.append([6, 160, 3, 2])
             interverted_residual_setting.append([6, 320, 1, 1])
 
-
         self.normalization_factory = NormalizationFactory(normalization_args['version'],
                                                           **normalization_args['norm_factory_args'],
                                                           **normalization_args['SGN_args'])
