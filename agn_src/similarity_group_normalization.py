@@ -473,8 +473,7 @@ class ClusteringStrategy(ABC):
         kmeans = KMeansConstrained(n_clusters=self.filtered_num_groups,
                                    size_min=self.min_group_size,
                                    size_max=np.min([self.max_group_size, num_of_ch]),
-                                   random_state=0,
-                                   n_jobs=-1)
+                                   random_state=0)
         kmeans.fit(channel_stats.cpu().detach().numpy())
 
         # The labels_ attribute of the fitted model
