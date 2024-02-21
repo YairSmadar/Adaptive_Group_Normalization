@@ -574,7 +574,7 @@ class ClusteringStrategy(ABC):
     def create_mean_var_nparray(self, channels_input):
         mean_vals = torch.mean(channels_input, dim=(2, 3))
         var_vals = torch.var(channels_input, dim=(2, 3))
-
+        var_vals[torch.isnan(var_vals)] = 0
         # Reshape to (N*C)
         mean_vals = mean_vals.view(-1, 1)
         var_vals = var_vals.view(-1, 1)
