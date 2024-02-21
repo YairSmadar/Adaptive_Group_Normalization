@@ -2,12 +2,12 @@
   "model_version": 1,
   "SGN_version": 14,
   "RGN_version": 1,
-  "use_VGN": true,
+  "use_VGN": false,
   "dataset": "cifar100",
-  "arch": "mobilenetv2",
+  "arch": "densenet",
   "eps": 1e-12,
-  "VGN_min_gs_mul": 0.8,
-  "VGN_max_gs_mul": 1.2,
+  "VGN_min_gs_mul": 1.0,
+  "VGN_max_gs_mul": 1.0,
   "method": "SGN",
   "epochs": 100,
   "batch_size": 16,
@@ -16,18 +16,15 @@
   "epoch_start_cluster": 0,
   "norm_shuffle": 20,
   "max_norm_shuffle": 50,
-  "print_freq": 1,
+  "print_freq": 1250,
   "saveing_path": "saved_models/",
   "seed": 0,
   "group_by_size": true,
   "group_norm_size": 16,
-  "use_wandb": false,
+  "use_wandb": true,
   "scheduler_name": "default",
   "classes_to_train":
   [
-    "apple",
-    "bear",
-    "aquarium_fish",
-    "baby"
+    "all"
   ]
 }

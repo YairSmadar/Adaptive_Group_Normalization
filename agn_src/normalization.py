@@ -65,7 +65,28 @@ class NormalizationFactory:
             raise Exception("Normalization layer not recognized for initialization")
 
     def groupsBySize(self, numofchannels):
-        return int(numofchannels / self.group_size)
+        return self.find_closest_natural_divisor(numofchannels, self.group_size)
+
+    def find_closest_natural_divisor(self, x, y):
+        m = x / y  # Calculate M
+        m = min(m, int(m))  # Ensure M is the minimum of M and int(M)
+
+        # If X divided by M is already a natural number, and M is an integer, return M
+        if x % m == 0:
+            return int(m)  # Return M as an integer
+
+        closest_divisor = None
+        smallest_difference = float('inf')  # Initialize with an infinitely large value
+
+        # Iterate over possible divisors from 1 to X
+        for i in range(1, x + 1):
+            if x % i == 0:  # Check if i is a divisor of X
+                difference = abs(m - i)  # Calculate the difference from M
+                if difference < smallest_difference:  # Check if this is the smallest difference so far
+                    closest_divisor = i
+                    smallest_difference = difference
+
+        return closest_divisor
 
     def create_norm2d(self, planes):
         normalization_layer_dict = {
