@@ -229,5 +229,5 @@ def mobilenet_v2(args):
     ]
 
     model = MobileNetV2(normalization_args=args["normalization_args"], num_classes=args["n_class"],
-                        inverted_residual_setting=inverted_residual_setting)
+                        inverted_residual_setting=None)
     return model
