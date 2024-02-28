@@ -1,6 +1,6 @@
 import global_vars
 
-from torchvision.transforms import Normalize, Compose, RandomHorizontalFlip, ToTensor
+from torchvision.transforms import Normalize, Compose, RandomHorizontalFlip, ToTensor, Resize
 from torchvision.datasets import CIFAR100
 from torch.utils.data import DataLoader
 import numpy as np
@@ -46,12 +46,17 @@ import numpy as np
 """
 
 
-def getLoaders(datasetName, gen):
+def getLoaders(datasetName, gen, input_size=None):
     reclustringLoader = None
     if datasetName == 'cifar100':
         CIFAR100_normalize = Normalize(mean=[0.5071, 0.4867, 0.4408], std=[0.2675, 0.2565, 0.2761])
-        train_transform = Compose([RandomHorizontalFlip(), ToTensor(), CIFAR100_normalize])
-        test_transform = Compose([ToTensor(), CIFAR100_normalize])
+        # Check if input_size is provided and add Resize transformation accordingly
+        if input_size is not None:
+            train_transform = Compose([Resize(input_size), RandomHorizontalFlip(), ToTensor(), CIFAR100_normalize])
+            test_transform = Compose([Resize(input_size), ToTensor(), CIFAR100_normalize])
+        else:
+            train_transform = Compose([RandomHorizontalFlip(), ToTensor(), CIFAR100_normalize])
+            test_transform = Compose([ToTensor(), CIFAR100_normalize])
         trainset = CIFAR100(root='./dataset/train', train=True, download=True, transform=train_transform)
         testset = CIFAR100(root='./dataset/test', train=False, download=True, transform=test_transform)
 

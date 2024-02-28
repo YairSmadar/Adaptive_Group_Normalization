@@ -60,8 +60,10 @@ def main():
     # create model
     print("=> creating model resnet50")
 
+    input_size = getattr(args, "input_size", None)
+
     # CIFAR100 data loading code
-    train_loader, val_loader, reclustring_loader = getLoaders(args.dataset, global_vars.generator)
+    train_loader, val_loader, reclustring_loader = getLoaders(args.dataset, global_vars.generator, input_size)
 
     normalization_args = \
         {
@@ -91,14 +93,18 @@ def main():
                 }
         }
 
+    input_size = train_loader.dataset.data.shape[1] if not hasattr(args, 'input_size') else args.input_size
     setting_args = {'n_class': len(train_loader.dataset.classes),
-                    'input_size': train_loader.dataset.data.shape[1],
+                    'input_size': input_size,
                     'width_mult': 1}
 
     model_args = {**normalization_args, **setting_args}
 
     model = ModelsManeger.get_model(model_name=args.arch, args=model_args)
-    N, H, W, C = train_loader.dataset.data.shape
+    if not hasattr(args, 'input_size'):
+        N, H, W, C = train_loader.dataset.data.shape
+    else:
+        N, H, W, C = train_loader.dataset.data.shape[0], args.input_size, args.input_size, train_loader.dataset.data.shape[3]
     summary(model, (C, H, W))
     model = DataParallel(model).to(global_vars.device)
 

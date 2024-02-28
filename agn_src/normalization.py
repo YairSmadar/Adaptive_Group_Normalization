@@ -71,8 +71,10 @@ class NormalizationFactory:
         m = x / y  # Calculate M
         m = min(m, int(m))  # Ensure M is the minimum of M and int(M)
 
+        # if m == 0:
+        #     return 1  # one group
         # If X divided by M is already a natural number, and M is an integer, return M
-        if x % m == 0:
+        if m is not 0 and x % m == 0:
             return int(m)  # Return M as an integer
 
         closest_divisor = None
@@ -104,9 +106,9 @@ class NormalizationFactory:
         else:
             num_groups = self.groupsBySize(planes) if self.group_by_size else self.group_norm
 
-            if self.group_by_size and self.group_size >= planes:
-                normalization_layer = LayerNorm(planes, eps=self.eps)
-            elif self.method == "GN":
+            # if self.group_by_size and self.group_size >= planes:
+            #     normalization_layer = LayerNorm(planes, eps=self.eps)
+            if self.method == "GN":
                 normalization_layer = GroupNorm(num_groups, planes, eps=self.eps)
             elif self.method == "SGN":
                 normalization_layer = normalization_layer_dict[self.method](
