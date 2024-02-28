@@ -1,4 +1,5 @@
 from classification.models import resnet50, mobilenetv2, densenet, efficientnet
+import torch
 
 
 class ModelsManeger:
@@ -11,6 +12,8 @@ class ModelsManeger:
             "efficientnet": efficientnet.efficientnet
         }
 
-        return models_dict[model_name](args)
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        return models_dict[model_name](args).to(device)
 
 
