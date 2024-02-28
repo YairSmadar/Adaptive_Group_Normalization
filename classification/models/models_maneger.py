@@ -8,7 +8,10 @@ class ModelsManeger:
         models_dict = {
             "resnet50": resnet50.resnet50,
             "mobilenetv2": mobilenetv2.mobilenet_v2,
-            "densenet": densenet.densenet3,
+            "densenet121": densenet.densenet121,
+            "densenet169": densenet.densenet169,
+            "densenet201": densenet.densenet201,
+            "densenet161": densenet.densenet161,
             "efficientnet": efficientnet.efficientnet
         }
 

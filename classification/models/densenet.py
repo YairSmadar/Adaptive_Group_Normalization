@@ -1,149 +1,145 @@
-import math
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from agn_src.normalization import NormalizationFactory
 from agn_src.random_group_normalization import RandomGroupNorm as rgn
 from agn_src.similarity_group_normalization import SimilarityGroupNorm as sgn
 
-class BasicBlock(nn.Module):
-    def __init__(self, in_planes, out_planes, normalization_factory, dropRate=0.0):
-        super(BasicBlock, self).__init__()
-        self.bn1 = normalization_factory.create_norm2d(in_planes)
-        self.relu = nn.ReLU(inplace=True)
-        self.conv1 = nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=1,
-                               padding=1, bias=False)
-        self.droprate = dropRate
+"""dense net in pytorch
+
+
+
+[1] Gao Huang, Zhuang Liu, Laurens van der Maaten, Kilian Q. Weinberger.
+
+    Densely Connected Convolutional Networks
+    https://arxiv.org/abs/1608.06993v5
+"""
+
+
+class Bottleneck(nn.Module):
+    def __init__(self, in_channels, growth_rate, normalization_factory):
+        super().__init__()
+        # """In  our experiments, we let each 1×1 convolution
+        # produce 4k feature-maps."""
+        inner_channel = 4 * growth_rate
+
+        # """We find this design especially effective for DenseNet and
+        # we refer to our network with such a bottleneck layer, i.e.,
+        # to the BN-ReLU-Conv(1×1)-BN-ReLU-Conv(3×3) version of H ` ,
+        # as DenseNet-B."""
+        self.bottle_neck = nn.Sequential(
+            normalization_factory.create_norm2d(in_channels),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(in_channels, inner_channel, kernel_size=1, bias=False),
+            normalization_factory.create_norm2d(inner_channel),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(inner_channel, growth_rate, kernel_size=3, padding=1, bias=False)
+        )
 
     def forward(self, x):
-        out = self.conv1(self.relu(self.bn1(x)))
-        if self.droprate > 0:
-            out = F.dropout(out, p=self.droprate, training=self.training)
-        return torch.cat([x, out], 1)
+        return torch.cat([x, self.bottle_neck(x)], 1)
 
 
-class BottleneckBlock(nn.Module):
-    def __init__(self, in_planes, out_planes, normalization_factory, dropRate=0.0):
-        super(BottleneckBlock, self).__init__()
-        inter_planes = out_planes * 4
-        self.bn1 = normalization_factory.create_norm2d(in_planes)
-        self.relu = nn.ReLU(inplace=True)
-        self.conv1 = nn.Conv2d(in_planes, inter_planes, kernel_size=1, stride=1,
-                               padding=0, bias=False)
-        self.bn2 = normalization_factory.create_norm2d(inter_planes)
-        self.conv2 = nn.Conv2d(inter_planes, out_planes, kernel_size=3, stride=1,
-                               padding=1, bias=False)
-        self.droprate = dropRate
-
-    def forward(self, x):
-        out = self.conv1(self.relu(self.bn1(x)))
-        if self.droprate > 0:
-            out = F.dropout(out, p=self.droprate, inplace=False, training=self.training)
-        out = self.conv2(self.relu(self.bn2(out)))
-        if self.droprate > 0:
-            out = F.dropout(out, p=self.droprate, inplace=False, training=self.training)
-        return torch.cat([x, out], 1)
-
-
-class TransitionBlock(nn.Module):
-    def __init__(self, in_planes, out_planes, normalization_factory, dropRate=0.0):
-        super(TransitionBlock, self).__init__()
-        self.bn1 = normalization_factory.create_norm2d(in_planes)
-        self.relu = nn.ReLU(inplace=True)
-        self.conv1 = nn.Conv2d(in_planes, out_planes, kernel_size=1, stride=1,
-                               padding=0, bias=False)
-        self.droprate = dropRate
+# """We refer to layers between blocks as transition
+# layers, which do convolution and pooling."""
+class Transition(nn.Module):
+    def __init__(self, in_channels, out_channels, normalization_factory):
+        super().__init__()
+        # """The transition layers used in our experiments
+        # consist of a batch normalization layer and an 1×1
+        # convolutional layer followed by a 2×2 average pooling
+        # layer""".
+        self.down_sample = nn.Sequential(
+            normalization_factory.create_norm2d(in_channels),
+            nn.Conv2d(in_channels, out_channels, 1, bias=False),
+            nn.AvgPool2d(2, stride=2)
+        )
 
     def forward(self, x):
-        out = self.conv1(self.relu(self.bn1(x)))
-        if self.droprate > 0:
-            out = F.dropout(out, p=self.droprate, inplace=False, training=self.training)
-        return F.avg_pool2d(out, 2)
+        return self.down_sample(x)
 
 
-class DenseBlock(nn.Module):
-    def __init__(self, nb_layers, in_planes, growth_rate, block, normalization_factory, dropRate=0.0):
-        super(DenseBlock, self).__init__()
-        self.layer = self._make_layer(block, in_planes, growth_rate, nb_layers, normalization_factory, dropRate)
+# DesneNet-BC
+# B stands for bottleneck layer(BN-RELU-CONV(1x1)-BN-RELU-CONV(3x3))
+# C stands for compression factor(0<=theta<=1)
+class DenseNet(nn.Module):
+    def __init__(self, block, nblocks, growth_rate=12, reduction=0.5, num_class=100, normalization_args=None):
+        super().__init__()
+        self.growth_rate = growth_rate
 
-    def _make_layer(self, block, in_planes, growth_rate, nb_layers, normalization_factory, dropRate):
-        layers = []
-        for i in range(nb_layers):
-            layers.append(block(in_planes + i * growth_rate, growth_rate, normalization_factory, dropRate))
-        return nn.Sequential(*layers)
+        normalization_factory = NormalizationFactory(normalization_args['version'],
+                                                     **normalization_args['norm_factory_args'],
+                                                     **normalization_args['SGN_args'])
 
-    def forward(self, x):
-        return self.layer(x)
+        # """Before entering the first dense block, a convolution
+        # with 16 (or twice the growth rate for DenseNet-BC)
+        # output channels is performed on the input images."""
+        inner_channels = 2 * growth_rate
 
+        # For convolutional layers with kernel size 3×3, each
+        # side of the inputs is zero-padded by one pixel to keep
+        # the feature-map size fixed.
+        self.conv1 = nn.Conv2d(3, inner_channels, kernel_size=3, padding=1, bias=False)
 
-class DenseNet3(nn.Module):
-    def __init__(self, depth, num_classes, normalization_args, growth_rate=12,
-                 reduction=0.5, bottleneck=True, dropRate=0.0):
-        super(DenseNet3, self).__init__()
+        self.features = nn.Sequential()
 
-        self.normalization_factory = NormalizationFactory(normalization_args['version'],
-                                                          **normalization_args['norm_factory_args'],
-                                                          **normalization_args['SGN_args'])
+        for index in range(len(nblocks) - 1):
+            self.features.add_module("dense_block_layer_{}".format(index),
+                                     self._make_dense_layers(block, inner_channels, nblocks[index],
+                                                             normalization_factory))
+            inner_channels += growth_rate * nblocks[index]
 
-        in_planes = 2 * growth_rate
-        n = (depth - 4) / 3
-        if bottleneck == True:
-            n = n / 2
-            block = BottleneckBlock
-        else:
-            block = BasicBlock
-        n = int(n)
-        # 1st conv before any dense block
-        self.conv1 = nn.Conv2d(3, in_planes, kernel_size=3, stride=1,
-                               padding=1, bias=False)
-        # 1st block
-        self.block1 = DenseBlock(n, in_planes, growth_rate, block, normalization_factory=self.normalization_factory, dropRate=dropRate)
-        in_planes = int(in_planes + n * growth_rate)
-        self.trans1 = TransitionBlock(in_planes, int(math.floor(in_planes * reduction)), normalization_factory=self.normalization_factory, dropRate=dropRate)
-        in_planes = int(math.floor(in_planes * reduction))
-        # 2nd block
-        self.block2 = DenseBlock(n, in_planes, growth_rate, block, normalization_factory=self.normalization_factory,dropRate=dropRate)
-        in_planes = int(in_planes + n * growth_rate)
-        self.trans2 = TransitionBlock(in_planes, int(math.floor(in_planes * reduction)), normalization_factory=self.normalization_factory, dropRate=dropRate)
-        in_planes = int(math.floor(in_planes * reduction))
-        # 3rd block
-        self.block3 = DenseBlock(n, in_planes, growth_rate, block, normalization_factory=self.normalization_factory, dropRate=dropRate)
-        in_planes = int(in_planes + n * growth_rate)
-        # global average pooling and classifier
-        self.bn1 = self.normalization_factory.create_norm2d(in_planes)
-        self.relu = nn.ReLU(inplace=True)
-        self.fc = nn.Linear(in_planes, num_classes)
-        self.in_planes = in_planes
+            # """If a dense block contains m feature-maps, we let the
+            # following transition layer generate θm output feature-
+            # maps, where 0 < θ ≤ 1 is referred to as the compression
+            # fac-tor.
+            out_channels = int(reduction * inner_channels)  # int() will automatic floor the value
+            self.features.add_module("transition_layer_{}".format(index),
+                                     Transition(inner_channels, out_channels, normalization_factory))
+            inner_channels = out_channels
 
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-                m.weight.data.normal_(0, math.sqrt(2. / n))
-            elif isinstance(m, nn.BatchNorm2d):
-                m.weight.data.fill_(1)
-                m.bias.data.zero_()
-            elif isinstance(m, nn.Linear):
-                m.bias.data.zero_()
-            elif isinstance(m, nn.GroupNorm):
-                m.weight.data.fill_(1)
-                m.bias.data.zero_()
-            elif isinstance(m, rgn):
-                m.groupNorm.weight.data.fill_(1)
-                m.groupNorm.bias.data.zero_()
-            elif isinstance(m, sgn):
-                m.groupNorm.weight.data.fill_(1)
-                m.groupNorm.bias.data.zero_()
+        self.features.add_module("dense_block{}".format(len(nblocks) - 1),
+                                 self._make_dense_layers(block, inner_channels, nblocks[len(nblocks) - 1],
+                                                         normalization_factory))
+        inner_channels += growth_rate * nblocks[len(nblocks) - 1]
+        self.features.add_module('bn', normalization_factory.create_norm2d(inner_channels))
+        self.features.add_module('relu', nn.ReLU(inplace=True))
+
+        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
+
+        self.linear = nn.Linear(inner_channels, num_class)
 
     def forward(self, x):
-        out = self.conv1(x)
-        out = self.trans1(self.block1(out))
-        out = self.trans2(self.block2(out))
-        out = self.block3(out)
-        out = self.relu(self.bn1(out))
-        out = F.avg_pool2d(out, 8)
-        out = out.view(-1, self.in_planes)
-        return self.fc(out)
+        output = self.conv1(x)
+        output = self.features(output)
+        output = self.avgpool(output)
+        output = output.view(output.size()[0], -1)
+        output = self.linear(output)
+        return output
+
+    def _make_dense_layers(self, block, in_channels, nblocks, normalization_factory):
+        dense_block = nn.Sequential()
+        for index in range(nblocks):
+            dense_block.add_module('bottle_neck_layer_{}'.format(index),
+                                   block(in_channels, self.growth_rate, normalization_factory))
+            in_channels += self.growth_rate
+        return dense_block
 
 
-def densenet3(args):
-    return DenseNet3(depth=40, num_classes=args['n_class'], normalization_args=args["normalization_args"])
+def densenet121(args):
+    return DenseNet(Bottleneck, [6, 12, 24, 16], growth_rate=32, num_class=args['n_class'],
+                    normalization_args=args["normalization_args"])
+
+
+def densenet169(args):
+    return DenseNet(Bottleneck, [6, 12, 32, 32], growth_rate=32, num_class=args['n_class'],
+                    normalization_args=args["normalization_args"])
+
+
+def densenet201(args):
+    return DenseNet(Bottleneck, [6, 12, 48, 32], growth_rate=32, num_class=args['n_class'],
+                    normalization_args=args["normalization_args"])
+
+
+def densenet161(args):
+    return DenseNet(Bottleneck, [6, 12, 36, 24], growth_rate=48, num_class=args['n_class'],
+                    normalization_args=args["normalization_args"])
