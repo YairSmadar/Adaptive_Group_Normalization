@@ -11,7 +11,7 @@
   "method": "SGN",
   "epochs": 100,
   "batch_size": 16,
-  "lr": 0.01,
+  "lr": 0.1,
   "group_norm": 16,
   "epoch_start_cluster": 0,
   "norm_shuffle": 20,
@@ -20,7 +20,7 @@
   "saveing_path": "saved_models/",
   "seed": 0,
   "group_by_size": true,
-  "group_norm_size": 16,
+  "group_norm_size": 32,
   "use_wandb": true,
   "scheduler_name": "default",
   "classes_to_train":
