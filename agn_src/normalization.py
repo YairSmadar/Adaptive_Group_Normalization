@@ -95,7 +95,8 @@ class NormalizationFactory:
             "BN": BatchNorm2d,
             "GN": GroupNorm,
             "SGN": sgn,
-            "RGN": rgn
+            "RGN": rgn,
+            "LN": LayerNorm
         }
 
         if self.method not in normalization_layer_dict:
@@ -103,6 +104,8 @@ class NormalizationFactory:
 
         if self.method == "BN":
             normalization_layer = normalization_layer_dict[self.method](num_features=planes, eps=self.eps)
+        elif self.method == "LN":
+            normalization_layer = normalization_layer_dict[self.method](normalized_shape=planes, eps=self.eps)
         else:
             num_groups = self.groupsBySize(planes) if self.group_by_size else self.group_norm
 

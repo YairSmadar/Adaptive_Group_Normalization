@@ -7,7 +7,9 @@
     [
             {
                 "seed": 1,
-                "method": "GN"
+                "method": "GN",
+                "batch_size": 16,
+                "group_norm_size": 32
             },
             {
                 "method": "SGN",

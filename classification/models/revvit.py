@@ -32,10 +32,9 @@ class RevViT(nn.Module):
         self.depth = depth
         self.patch_size = patch_size
 
-        normalization_factory = NormalizationFactory(normalization_args['version'],
+        self.normalization_factory = NormalizationFactory(normalization_args['version'],
                                                      **normalization_args['norm_factory_args'],
                                                      **normalization_args['SGN_args'])
-
         if type(image_size) == int:
             image_size = (image_size, image_size)
 
@@ -52,7 +51,8 @@ class RevViT(nn.Module):
                     dim=self.embed_dim,
                     num_heads=self.n_head,
                     enable_amp=enable_amp,
-                    normalization_factory=normalization_factory
+                    normalization_factory=self.normalization_factory,
+                    image_size=image_size
                 )
                 for _ in range(self.depth)
             ]
@@ -78,7 +78,11 @@ class RevViT(nn.Module):
         # more expressive methods like in paper, but we use
         # linear layer + LN for simplicity.
         self.head = nn.Linear(2 * self.embed_dim, num_classes, bias=True)
-        self.norm = nn.LayerNorm(2 * self.embed_dim)
+
+        if self.normalization_factory.method == 'LN':
+            self.norm = nn.LayerNorm(2 * self.embed_dim)
+        else:
+            self.norm = self.normalization_factory.create_norm2d(3)
 
     @staticmethod
     def vanilla_backward(h, layers):
@@ -96,6 +100,7 @@ class RevViT(nn.Module):
     def forward(self, x):
         # patchification using conv and flattening
         # + abolsute positional embeddings
+        N, C, H, W = x.shape
         x = self.patch_embed(x).flatten(2).transpose(1, 2)
         x += self.pos_embeddings
 
@@ -119,7 +124,13 @@ class RevViT(nn.Module):
         x = x.mean(1)
 
         # head pre-norm
-        x = self.norm(x)
+        if self.normalization_factory.method == 'LN':
+            x = self.norm(x)
+        else:
+            x_shape = x.shape
+            x = x.reshape(N // 2, C, H, W)
+            x = self.norm(x)
+            x = x.reshape(x_shape)
 
         # pre-softmax logits
         x = self.head(x)
@@ -199,7 +210,7 @@ class ReversibleBlock(nn.Module):
     See Section 3.3.2 in paper for details.
     """
 
-    def __init__(self, dim, num_heads, enable_amp, normalization_factory):
+    def __init__(self, dim, num_heads, enable_amp, normalization_factory, image_size=None):
         """
         Block is composed entirely of function F (Attention
         sub-block) and G (MLP sub-block) including layernorm.
@@ -208,10 +219,12 @@ class ReversibleBlock(nn.Module):
         # F and G can be arbitrary functions, here we use
         # simple attwntion and MLP sub-blocks using vanilla attention.
         self.F = AttentionSubBlock(
-            dim=dim, num_heads=num_heads, enable_amp=enable_amp, normalization_factory=normalization_factory
+            dim=dim, num_heads=num_heads, enable_amp=enable_amp, normalization_factory=normalization_factory,
+            image_size=image_size
         )
 
-        self.G = MLPSubblock(dim=dim, enable_amp=enable_amp, normalization_factory=normalization_factory)
+        self.G = MLPSubblock(dim=dim, enable_amp=enable_amp, normalization_factory=normalization_factory,
+                             image_size=image_size)
 
         # note that since all functions are deterministic, and we are
         # not using any stochastic elements such as dropout, we do
@@ -335,11 +348,16 @@ class MLPSubblock(nn.Module):
             dim,
             mlp_ratio=4,
             enable_amp=False,  # standard for ViTs
-            normalization_factory=None
+            normalization_factory=None,
+            image_size=None
     ):
         super().__init__()
+        if normalization_factory.method == 'LN':
+            norm_dim = dim
+        else:
+            norm_dim = dim // 2
 
-        self.norm = nn.LayerNorm(dim)
+        self.norm = normalization_factory.create_norm2d(norm_dim)
 
         self.mlp = nn.Sequential(
             nn.Linear(dim, dim * mlp_ratio),
@@ -347,6 +365,9 @@ class MLPSubblock(nn.Module):
             nn.Linear(dim * mlp_ratio, dim),
         )
         self.enable_amp = enable_amp
+        self.dim = dim
+        self.image_size = image_size
+        self.normalization_factory = normalization_factory
 
     def forward(self, x):
         # The reason for implementing autocast inside forward loop instead
@@ -356,7 +377,16 @@ class MLPSubblock(nn.Module):
         # with mixed precision, the recomputation must also be so. This cannot
         # be handled with the autocast setup in main training logic.
         with torch.cuda.amp.autocast(enabled=self.enable_amp):
-            return self.mlp(self.norm(x))
+            if self.normalization_factory.method == 'LN':
+                x = self.norm(x)
+            else:
+                H, W = self.image_size
+                x_shape = x.shape
+                x = x.reshape(-1, self.dim // 2, H, W)
+                x = self.norm(x)
+                x = x.reshape(x_shape)
+
+            return self.mlp(x)
 
 
 class AttentionSubBlock(nn.Module):
@@ -370,11 +400,19 @@ class AttentionSubBlock(nn.Module):
             dim,
             num_heads,
             enable_amp=False,
-            normalization_factory=None
+            normalization_factory=None,
+            image_size=None
     ):
         super().__init__()
-        self.norm = nn.LayerNorm(dim, eps=1e-6, elementwise_affine=True)
+        if normalization_factory.method == 'LN':
+            norm_dim = dim
+        else:
+            norm_dim = dim // 2
 
+        self.norm = normalization_factory.create_norm2d(norm_dim)
+
+        self.normalization_factory = normalization_factory
+        self.image_size = image_size
         # using vanilla attention for simplicity. To support adanced attention
         # module see pyslowfast.
         # Note that the complexity of the attention module is not a concern
@@ -382,11 +420,20 @@ class AttentionSubBlock(nn.Module):
         # can be arbitrary.
         self.attn = MHA(dim, num_heads, batch_first=True)
         self.enable_amp = enable_amp
+        self.dim = dim
 
     def forward(self, x):
         # See MLP fwd pass for explanation.
         with torch.cuda.amp.autocast(enabled=self.enable_amp):
-            x = self.norm(x)
+
+            if self.normalization_factory.method == 'LN':
+                x = self.norm(x)
+            else:
+                H, W = self.image_size
+                x_shape = x.shape
+                x = x.reshape(-1, self.dim // 2, H, W)
+                x = self.norm(x)
+                x = x.reshape(x_shape)
             out, _ = self.attn(x, x, x)
             return out
 
