@@ -1,0 +1,4 @@
+[
+    {"method": "GN", "group_norm_size": 8, "epochs":  1},
+    {"method": "SGN", "use_VGN": false}
+]

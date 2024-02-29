@@ -1,0 +1,47 @@
+{
+    "gpu_number": "1",
+    "train_script": "train.py",
+    "config_file_path": "config/revvit/train_config.json",
+
+    "train_configs": [
+            {
+                "seed": 0,
+                "method": "GN"
+            },
+            {
+                "method": "SGN",
+                "use_VGN": false
+            },
+            {
+                "method": "SGN",
+                "use_VGN": true
+            },
+
+            {
+                "seed": 1,
+                "method": "GN"
+            },
+            {
+                "method": "SGN",
+                "use_VGN": false
+            },
+            {
+                "method": "SGN",
+                "use_VGN": true
+            },
+
+            {
+                "seed": 2,
+                "method": "GN"
+            },
+            {
+                "method": "SGN",
+                "use_VGN": false
+            },
+            {
+                "method": "SGN",
+                "use_VGN": true
+            }
+    ]
+
+}
