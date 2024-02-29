@@ -12,7 +12,8 @@ class ModelsManeger:
             "densenet169": densenet.densenet169,
             "densenet201": densenet.densenet201,
             "densenet161": densenet.densenet161,
-            "efficientnet": efficientnet.efficientnet
+            "efficientnet-b0": efficientnet.efficientnet_b0,
+            "efficientnet-b3": efficientnet.efficientnet_b3
         }
 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

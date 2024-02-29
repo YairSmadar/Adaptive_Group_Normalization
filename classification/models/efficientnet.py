@@ -194,12 +194,14 @@ class EfficientNet(nn.Module):
             )
 
             # The first block needs to take care of stride and filter size increase.
-            self._blocks.append(MBConvBlock(block_args, self._global_params, image_size=image_size, normalization_factory=self.normalization_factory))
+            self._blocks.append(MBConvBlock(block_args, self._global_params, image_size=image_size,
+                                            normalization_factory=self.normalization_factory))
             image_size = calculate_output_image_size(image_size, block_args.stride)
             if block_args.num_repeat > 1:  # modify block_args to keep same output size
                 block_args = block_args._replace(input_filters=block_args.output_filters, stride=1)
             for _ in range(block_args.num_repeat - 1):
-                self._blocks.append(MBConvBlock(block_args, self._global_params, image_size=image_size, normalization_factory=self.normalization_factory))
+                self._blocks.append(MBConvBlock(block_args, self._global_params, image_size=image_size,
+                                                normalization_factory=self.normalization_factory))
                 # image_size = calculate_output_image_size(image_size, block_args.stride)  # stride = 1
 
         # Head
@@ -207,7 +209,7 @@ class EfficientNet(nn.Module):
         out_channels = round_filters(1280, self._global_params)
         Conv2d = get_same_padding_conv2d(image_size=image_size)
         self._conv_head = Conv2d(in_channels, out_channels, kernel_size=1, bias=False)
-        self._bn1 = nn.BatchNorm2d(num_features=out_channels, momentum=bn_mom, eps=bn_eps)
+        self._bn1 = self.normalization_factory.create_norm2d(out_channels)
 
         # Final linear layer
         self._avg_pooling = nn.AdaptiveAvgPool2d(1)
@@ -419,8 +421,15 @@ class EfficientNet(nn.Module):
             self._conv_stem = Conv2d(in_channels, out_channels, kernel_size=3, stride=2, bias=False)
 
 
-def efficientnet(args):
+def efficientnet_b0(args):
     model = EfficientNet.from_name('efficientnet-b0', in_channels=3, normalization_args=args["normalization_args"],
-                                    override_params={"num_classes": args["n_class"], "image_size": args["input_size"]})
+                                   override_params={"num_classes": args["n_class"], "image_size": args["input_size"]})
+
+    return model
+
+
+def efficientnet_b3(args):
+    model = EfficientNet.from_name('efficientnet-b3', in_channels=3, normalization_args=args["normalization_args"],
+                                   override_params={"num_classes": args["n_class"], "image_size": args["input_size"]})
 
     return model

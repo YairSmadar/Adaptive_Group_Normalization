@@ -10,7 +10,7 @@
   "VGN_min_gs_mul": 1.0,
   "VGN_max_gs_mul": 1.0,
   "method": "SGN",
-  "epochs": 100,
+  "epochs": 70,
   "batch_size": 16,
   "lr": 0.01,
   "group_norm": 16,
