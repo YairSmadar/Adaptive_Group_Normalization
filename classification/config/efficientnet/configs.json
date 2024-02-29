@@ -1,15 +1,27 @@
 {
-    "gpu_number": "0",
+    "gpu_number": "3",
     "train_script": "train.py",
     "config_file_path": "config/efficientnet/train_config.json",
 
     "train_configs": 
     [
             {
-                "seed": 1,
-                "method": "GN",
+                "seed": 0,
                 "batch_size": 16,
-                "group_norm_size": 32
+                "group_norm_size": 32,
+                "method": "SGN",
+                "use_VGN": false
+            },
+            {
+                "method": "SGN",
+                "use_VGN": true
+            },
+
+
+
+            {
+                "seed": 1,
+                "method": "GN"
             },
             {
                 "method": "SGN",
@@ -19,6 +31,7 @@
                 "method": "SGN",
                 "use_VGN": true
             },
+
 
             {
                 "seed": 2,

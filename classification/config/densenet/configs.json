@@ -6,10 +6,18 @@
     "train_configs":
     [
             {
-                "seed": 1,
-                "method": "GN",
+                "seed": 0,
                 "batch_size": 16,
-                "group_norm_size": 32
+                "group_norm_size": 32,
+                "method": "SGN",
+                "use_VGN": true
+            },
+
+
+
+            {
+                "seed": 1,
+                "method": "GN"
             },
             {
                 "method": "SGN",
@@ -19,6 +27,8 @@
                 "method": "SGN",
                 "use_VGN": true
             },
+
+
 
             {
                 "seed": 2,
