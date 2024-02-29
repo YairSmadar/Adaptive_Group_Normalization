@@ -1,0 +1,31 @@
+{
+  "model_version": 1,
+  "SGN_version": 14,
+  "RGN_version": 1,
+  "use_VGN": false,
+  "dataset": "cifar100",
+  "arch": "revvit",
+  "input_size": 32,
+  "eps": 1e-12,
+  "VGN_min_gs_mul": 1.0,
+  "VGN_max_gs_mul": 1.0,
+  "method": "LN",
+  "epochs": 70,
+  "batch_size": 16,
+  "lr": 0.01,
+  "group_norm": 16,
+  "epoch_start_cluster": 0,
+  "norm_shuffle": 20,
+  "max_norm_shuffle": 50,
+  "print_freq": 1250,
+  "saveing_path": "saved_models/",
+  "seed": 0,
+  "group_by_size": true,
+  "group_norm_size": 16,
+  "use_wandb": true,
+  "scheduler_name": "default",
+  "classes_to_train":
+  [
+    "all"
+  ]
+}

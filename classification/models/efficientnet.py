@@ -23,8 +23,6 @@ from .efficientnet_utils import (
 )
 
 from agn_src.normalization import NormalizationFactory
-from agn_src.random_group_normalization import RandomGroupNorm as rgn
-from agn_src.similarity_group_normalization import SimilarityGroupNorm as sgn
 
 VALID_MODELS = (
     'efficientnet-b0', 'efficientnet-b1', 'efficientnet-b2', 'efficientnet-b3',
