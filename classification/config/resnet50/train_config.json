@@ -19,7 +19,6 @@
   "riar": 1,
   "print_freq": 1250,
   "saveing_path": "saved_models/",
-  "load": "init_weights/resnet50/W1.pt",
   "seed": 0,
   "group_by_size": true,
   "group_norm_size": 32,

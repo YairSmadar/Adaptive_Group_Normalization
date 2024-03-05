@@ -7,7 +7,6 @@
   "VGN_max_gs_mul": 1.2,
   "dataset": "cifar100",
   "arch": "resnet50",
-  "load": "init_weights\\resnet50\\W1.pt",
   "method": "SGN",
   "epochs": 100,
   "batch_size": 16,
