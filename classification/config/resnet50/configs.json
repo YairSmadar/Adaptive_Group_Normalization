@@ -1,7 +1,7 @@
 {
     "gpu_number": "2",
     "train_script": "train.py",
-    "config_file_path": "config/resnet/train_config.json",
+    "config_file_path": "config/resnet50/train_config.json",
 
     "train_configs": 
     [
