@@ -98,13 +98,16 @@ def generate_wandb_name(args):
     if args.method in {'SGN', 'RGN'}:
         wanda_test_name += f'_V{args.AGN_version}'
 
+        if args.use_VGN:
+            wanda_test_name += f'_use-VGN'
+
         if args.epoch_start_cluster != 0:
             wanda_test_name += f'_epoch-start-cluster-{args.epoch_start_cluster}'
 
-        wanda_test_name += f'_shuff-every-ep-{args.num_of_epch_to_shuffle}'
+        wanda_test_name += f'_every-{args.num_of_epch_to_shuffle}'
 
         if args.max_norm_shuffle != 1000:
-            wanda_test_name += f'_max-shuff-{args.max_norm_shuffle}'
+            wanda_test_name += f'_max-{args.max_norm_shuffle}'
 
         if args.no_shuff_best_k_p != 1.0:
             wanda_test_name += f'_ns-{args.no_shuff_best_k_p}'
@@ -123,13 +126,7 @@ def generate_wandb_name(args):
     else:
         wanda_test_name += f'_num-of-groups-{args.group_norm}'
 
-    if args.weights:
-        w = os.path.splitext(os.path.basename(args.weights))[0]
-        if 'init' in w:
-            w = w.replace('init_', 'W-')
-        else:
-            w = 'W-' + w
-        wanda_test_name += f'_{w}'
+    wanda_test_name += f'_seed-{args.seed}'
 
     return wanda_test_name
 
@@ -201,7 +198,6 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                     "group_by_size": opt.group_by_size,
                     "group_norm_size": opt.group_norm_size,
                     "group_norm": opt.group_norm,
-                    "plot_groups": opt.plot_groups,
                 },
             "SGN_args":
                 {
@@ -211,7 +207,11 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                     "std_threshold_l": opt.std_threshold_l,
                     "std_threshold_h": opt.std_threshold_h,
                     "keep_best_group_num_start": opt.keep_best_group_num_start,
+                    "use_VGN": opt.use_VGN,
+                    "VGN_min_gs_mul": opt.VGN_min_gs_mul,
+                    "VGN_max_gs_mul": opt.VGN_max_gs_mul
                 },
+
         }
 
     # Model
@@ -222,7 +222,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
             weights = attempt_download(weights)  # download if not found locally
         ckpt = torch.load(weights, map_location='cpu')  # load checkpoint to CPU to avoid CUDA memory leak
         model = Model(cfg or ckpt['model'].yaml, ch=3, nc=nc, anchors=hyp.get('anchors'),
-                      normalization_args=normalization_args).to(device)  # create
+                      normalization_args={**normalization_args}).to(device)  # create
         exclude = ['anchor'] if (cfg or hyp.get('anchors')) and not resume else []  # exclude keys
         csd = ckpt['model'].float().state_dict()  # checkpoint state_dict as FP32
         csd = intersect_dicts(csd, model.state_dict(), exclude=exclude)  # intersect
@@ -230,7 +230,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
         LOGGER.info(f'Transferred {len(csd)}/{len(model.state_dict())} items from {weights}')  # report
     else:
         model = Model(cfg, ch=3, nc=nc, anchors=hyp.get('anchors'),
-                      normalization_args=normalization_args).to(device)  # create
+                      normalization_args={**normalization_args}).to(device)  # create
     amp = check_amp(model)  # check AMP
 
     # Freeze
@@ -528,7 +528,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
             best_total = fitness(np.array(results).reshape(1, -1))  # weighted combination of [P, R, mAP@.5, mAP@.5-.95]
 
             wandb.log({"test precision": precision,
-                       "train recall": recall,
+                       "test recall": recall,
                        "test f1": f1,
                        "mAP@0.5:0.95": ap,
                        "mAP@0.5": ap50,
