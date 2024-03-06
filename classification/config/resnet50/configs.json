@@ -5,49 +5,37 @@
 
     "train_configs": 
     [
-            {
-                "arch": "resnet50",
-                "seed": 0,
-                "batch_size": 8,
-                "group_norm_size": 32,
-                "method": "GN"
-            },
+        {
+            "seed": 0,
+            "method": "SGN",
+            "use_VGN": true
+        },
 
-            {
-                "method": "SGN",
-                "use_VGN": false
-
-            },
-            {
-                "method": "SGN",
-                "use_VGN": true
-            },
-
-            {
-                "seed": 1,
-                "method": "GN"
-            },
-            {
-                "method": "SGN",
-                "use_VGN": false
-            },
-            {
-                "method": "SGN",
-                "use_VGN": true
-            },
+        {
+            "seed": 1,
+            "method": "GN"
+        },
+        {
+            "method": "SGN",
+            "use_VGN": false
+        },
+        {
+            "method": "SGN",
+            "use_VGN": true
+        },
 
 
-            {
-                "seed": 2,
-                "method": "GN"
-            },
-            {
-                "method": "SGN",
-                "use_VGN": false
-            },
-            {
-                "method": "SGN",
-                "use_VGN": true
-            }
+        {
+            "seed": 2,
+            "method": "GN"
+        },
+        {
+            "method": "SGN",
+            "use_VGN": false
+        },
+        {
+            "method": "SGN",
+            "use_VGN": true
+        }
     ]
 }
