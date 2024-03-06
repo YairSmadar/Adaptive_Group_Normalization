@@ -147,7 +147,7 @@ def main():
         validate(val_loader, model, criterion, 0)
         return
 
-    global_vars.init_saveing_path()
+    # global_vars.init_saveing_path()
 
     # set schedulers
     scheduler_manager = SchedulerManager(args.scheduler_name, args.epochs)
@@ -207,7 +207,7 @@ def main():
             scheduler_manager.schedulers_step(epoch)
 
             # save checkpoint
-            global_vars.save_checkpoint(model, optimizer, epoch)
+            # global_vars.save_checkpoint(model, optimizer, epoch)
 
 
 def train(train_loader, model, criterion, optimizer, epoch, get_to_start_epoch):
