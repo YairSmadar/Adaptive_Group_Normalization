@@ -51,11 +51,11 @@ class SimilarityGroupNorm(nn.Module):
         self.std_threshold_h = std_threshold_h
         self.keep_best_group_num_start = keep_best_group_num_start
         self.version = version
-        if no_shuff_best_k_p != 1.0 and \
-                math.floor(self.num_groups * no_shuff_best_k_p) != 0:
+
+        new_num_groups = math.ceil(self.num_groups * (1 - no_shuff_best_k_p))
+        if no_shuff_best_k_p != 1.0 and new_num_groups > 1:
             self.keep_best_std_groups = True
-            self.filtered_num_groups = \
-                num_groups - math.floor(self.num_groups * no_shuff_best_k_p)
+            self.new_num_groups = new_num_groups
         else:
             self.keep_best_std_groups = False
         self.eps = eps
@@ -159,6 +159,10 @@ class SimilarityGroupNorm(nn.Module):
 
             channelsClustering, self.cluster_sizes = self.strategy.sort_channels(
                 filtered_channels_input)
+
+            if should_keep_best_groups > 0 and len(best_std_channels_idx) > 0:
+                self.cluster_sizes = np.insert(self.cluster_sizes, int((best_std_channels_idx[0] / self.group_size).item()), len(best_std_channels_idx))
+
 
             if type(self.cluster_sizes) is not torch.Tensor:
                 self.cluster_sizes = \
@@ -271,7 +275,7 @@ class SimilarityGroupNorm(nn.Module):
         filtered_channels_input, best_std_channels_idx = \
             self.exclude_std_groups(channels_input, best_std_groups)
 
-        self.strategy.filtered_num_groups = self.filtered_num_groups
+        self.strategy.update_group_sizes(self.new_num_groups)
 
         best_group_size = best_std_groups.size()[0]
         N_best_groups = torch.empty((best_group_size * N),
@@ -322,8 +326,7 @@ class ClusteringStrategy(ABC):
     def __init__(self, num_groups: int, num_channels: int = 32,
                  plot_groups: bool = False, use_VGN: bool = False,
                  VGN_min_gs_mul: float = 1,
-                 VGN_max_gs_mul: float = 1
-                 ):
+                 VGN_max_gs_mul: float = 1):
         self.num_groups = num_groups
         self.num_channels = num_channels
         self.group_size = int(num_channels / num_groups)
@@ -333,19 +336,26 @@ class ClusteringStrategy(ABC):
         else:
             self.min_group_size = self.group_size
             self.max_group_size = self.group_size
-        self.filtered_num_groups = num_groups
+        self.new_num_groups = num_groups
         self._plot_groups = plot_groups
         self.use_VGN = use_VGN
+        self.VGN_min_gs_mul = VGN_min_gs_mul
+        self.VGN_max_gs_mul = VGN_max_gs_mul
 
 
     @abstractmethod
     def sort_channels(self, channels_input):
         pass
 
+    def update_group_sizes(self, new_num_groups):
+        self.new_num_groups = new_num_groups
+        self.min_group_size = np.floor(self.group_size * self.VGN_min_gs_mul)
+        self.max_group_size = np.ceil(self.group_size * self.VGN_max_gs_mul)
+
     def plot_groups(self, channels_groups, means, vars):
-        groups = torch.repeat_interleave(torch.arange(self.filtered_num_groups),
+        groups = torch.repeat_interleave(torch.arange(self.new_num_groups),
                                          torch.div(len(channels_groups),
-                                                   self.filtered_num_groups,
+                                                   self.new_num_groups,
                                                    rounding_mode='floor'),
                                          dim=0)
 
@@ -399,7 +409,7 @@ class ClusteringStrategy(ABC):
 
         max_elements = self.get_num_occurrences(channel_groups)
 
-        final_channel_groups = {i: [] for i in range(self.filtered_num_groups)}
+        final_channel_groups = {i: [] for i in range(self.new_num_groups)}
 
         # Create a max heap (using negative values)
         min_heap = [(-max_val, channel_num, group) for channel_num, max_vals in
@@ -438,11 +448,11 @@ class ClusteringStrategy(ABC):
         return eval_indexes
 
     def map_to_group(self, X: int):
-        group_num = (X // self.group_size) % self.filtered_num_groups
+        group_num = (X // self.group_size) % self.new_num_groups
         return group_num
 
     def get_num_occurrences(self, d):
-        num_counts = {i: [0] * self.filtered_num_groups for i in range(len(d))}
+        num_counts = {i: [0] * self.new_num_groups for i in range(len(d))}
 
         for i, lst in enumerate(d.values()):
             for num in lst:
@@ -471,7 +481,7 @@ class ClusteringStrategy(ABC):
         channel_stats = torch.stack((channel_means, channel_vars), dim=1)
         num_of_ch = channel_means.shape[0]
         # Perform constrained k-means clustering on the channel statistics
-        kmeans = KMeansConstrained(n_clusters=self.filtered_num_groups,
+        kmeans = KMeansConstrained(n_clusters=self.new_num_groups,
                                    size_min=self.min_group_size,
                                    size_max=np.min([self.max_group_size, num_of_ch]),
                                    random_state=0)
@@ -611,9 +621,9 @@ class SortChannelsV1(ClusteringStrategy):
         sorted_indexes = sorted(range(len(sort_metric)),
                                 key=lambda k: sort_metric[k])
 
-        endlist = [[] for _ in range(self.filtered_num_groups)]
+        endlist = [[] for _ in range(self.new_num_groups)]
         for index, item in enumerate(sorted_indexes):
-            endlist[index % self.filtered_num_groups].append(item)
+            endlist[index % self.new_num_groups].append(item)
 
         new_list = []
         for i in range(len(endlist)):
@@ -674,7 +684,7 @@ class SortChannelsV4(ClusteringStrategy):
         N, C, H, W = channels_input.size()
         input_no_h_w = channels_input.reshape(N * C, H * W)
         clf = KMeansConstrained(
-            n_clusters=int(self.filtered_num_groups),
+            n_clusters=int(self.new_num_groups),
             # size_min=groupSize,
             # size_max=groupSize,
             random_state=0
@@ -687,7 +697,7 @@ class SortChannelsV4(ClusteringStrategy):
 
         indexes = sort(clusters)[1]
         channelsClustering = zeros_like(clusters, device=channels_input.device)
-        for g in range(self.filtered_num_groups):
+        for g in range(self.new_num_groups):
             for i in range(self.group_size):
                 channelsClustering[
                     indexes[g * self.group_size + i]] = g * self.group_size + i
@@ -828,7 +838,7 @@ class SortChannelsV10(ClusteringStrategy):
 
 class SortChannelsV11(ClusteringStrategy):
     def sort_channels(self, channels_input):
-        _SortChannelsV10 = SortChannelsV10(self.filtered_num_groups,
+        _SortChannelsV10 = SortChannelsV10(self.new_num_groups,
                                            self.num_channels)
         channelsClustering = _SortChannelsV10.sort_channels(channels_input)
         channelsClustering = self.select_channels_indices_according_to_the_most(

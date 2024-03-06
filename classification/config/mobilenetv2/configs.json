@@ -5,7 +5,7 @@
 
     "train_configs": [
             {
-                "no_shuff_best_k_p": 0.2,
+                "no_shuff_best_k_p": 0.1,
                 "keep_best_group_num_start": 0,
                 "seed": 0,
                 "method": "SGN",
@@ -18,6 +18,22 @@
                 "VGN_max_gs_mul": 1.2
             },
 
+
+
+            {
+                "no_shuff_best_k_p": 0.2,
+                "keep_best_group_num_start": 0,
+                "seed": 0,
+                "method": "SGN",
+                "use_VGN": false
+            },
+            {
+                "method": "SGN",
+                "use_VGN": true
+            },
+
+
+
             {
                 "no_shuff_best_k_p": 0.4,
                 "keep_best_group_num_start": 0,
@@ -29,6 +45,8 @@
                 "method": "SGN",
                 "use_VGN": true
             },
+
+
 
             {
                 "no_shuff_best_k_p": 0.6,
