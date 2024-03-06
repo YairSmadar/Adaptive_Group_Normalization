@@ -97,7 +97,6 @@ class SimilarityGroupNorm(nn.Module):
         return ret
 
     def recluster(self, Conv_input):
-        self.recluster_num += 1
 
         # updating self.indexes
         self.SimilarityGroupNormClustering(clone(Conv_input))
@@ -129,6 +128,8 @@ class SimilarityGroupNorm(nn.Module):
                     self.groupNorm.load_state_dict(gn_state_dict)
 
         self.validate_new_indexes(Conv_input)
+        self.recluster_num += 1
+
 
     def SimilarityGroupNormClustering(self, channels_input):
         N, C, H, W = channels_input.size()

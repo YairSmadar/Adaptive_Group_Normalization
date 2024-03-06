@@ -10,6 +10,8 @@
   "VGN_min_gs_mul": 1.0,
   "VGN_max_gs_mul": 1.0,
   "method": "SGN",
+  "no_shuff_best_k_p": 0.2,
+  "keep_best_group_num_start": 0,
   "epochs": 70,
   "batch_size": 16,
   "lr": 0.01,
