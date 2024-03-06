@@ -11,7 +11,9 @@
             },
             {
                 "method": "SGN",
-                "use_VGN": true
+                "use_VGN": true,
+                "VGN_min_gs_mul": 0.8,
+                "VGN_max_gs_mul": 1.2
             },
             {
                 "seed": 1,
