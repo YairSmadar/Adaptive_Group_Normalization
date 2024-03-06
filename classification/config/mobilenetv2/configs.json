@@ -1,5 +1,5 @@
 {
-    "gpu_number": "2",
+    "gpu_number": "0",
     "train_script": "train.py",
     "config_file_path": "config/mobilenetv2/train_config.json",
 
