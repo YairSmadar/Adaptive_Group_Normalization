@@ -275,7 +275,7 @@ class SimilarityGroupNorm(nn.Module):
         filtered_channels_input, best_std_channels_idx = \
             self.exclude_std_groups(channels_input, best_std_groups)
 
-        self.strategy.update_group_sizes(self.new_num_groups)
+        self.strategy.update_new_num_groups(self.new_num_groups)
 
         best_group_size = best_std_groups.size()[0]
         N_best_groups = torch.empty((best_group_size * N),
@@ -347,10 +347,8 @@ class ClusteringStrategy(ABC):
     def sort_channels(self, channels_input):
         pass
 
-    def update_group_sizes(self, new_num_groups):
+    def update_new_num_groups(self, new_num_groups):
         self.new_num_groups = new_num_groups
-        self.min_group_size = np.floor(self.group_size * self.VGN_min_gs_mul)
-        self.max_group_size = np.ceil(self.group_size * self.VGN_max_gs_mul)
 
     def plot_groups(self, channels_groups, means, vars):
         groups = torch.repeat_interleave(torch.arange(self.new_num_groups),
