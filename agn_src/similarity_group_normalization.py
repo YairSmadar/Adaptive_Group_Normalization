@@ -348,7 +348,7 @@ class ClusteringStrategy(ABC):
         pass
 
     def update_new_num_groups(self, new_num_groups):
-        self.new_num_groups = new_num_groups
+        self.new_num_groups =  new_num_groups
 
     def plot_groups(self, channels_groups, means, vars):
         groups = torch.repeat_interleave(torch.arange(self.new_num_groups),
