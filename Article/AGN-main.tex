@@ -1,0 +1,276 @@
+\documentclass{article}
+
+
+% if you need to pass options to natbib, use, e.g.:
+%     \PassOptionsToPackage{numbers, compress}{natbib}
+% before loading neurips_2023
+
+
+% ready for submission
+\usepackage{neurips_2023}
+
+
+% to compile a preprint version, e.g., for submission to arXiv, add add the
+% [preprint] option:
+%     \usepackage[preprint]{neurips_2023}
+
+
+% to compile a camera-ready version, add the [final] option, e.g.:
+%     \usepackage[final]{neurips_2023}
+
+
+% to avoid loading the natbib package, add option nonatbib:
+%    \usepackage[nonatbib]{neurips_2023}
+
+
+\usepackage[utf8]{inputenc} % allow utf-8 input
+\usepackage[T1]{fontenc}    % use 8-bit T1 fonts
+\usepackage{hyperref}       % hyperlinks
+\usepackage{url}            % simple URL typesetting
+\usepackage{booktabs}       % professional-quality tables
+\usepackage{amsfonts}       % blackboard math symbols
+\usepackage{nicefrac}       % compact symbols for 1/2, etc.
+\usepackage{microtype}      % microtypography
+\usepackage{xcolor}         % colors
+\usepackage[noend]{algpseudocode}
+\usepackage{algorithm}
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage{graphicx} % Include this line in the preamble
+
+
+\title{Adaptive Group Normalization: Harnessing Dynamic Channel Statistics for Enhanced Deep Learning Performance}
+
+
+% The \author macro works with any number of authors. There are two commands
+% used to separate the names and addresses of multiple authors: \And and \AND.
+%
+% Using \And between authors leaves it to LaTeX to determine where to break the
+% lines. Using \AND forces a line break at that point. So, if LaTeX puts 3 of 4
+% authors' names on the first line, and the last on the second line, try using
+% \AND instead of \And before the third author name.
+
+
+\author{
+  Yair Smadar\thanks{Use footnote for providing further information
+    about the author (webpage, alternative address)---\emph{not} for acknowledging
+    funding agencies.} \\
+  School of Computer Science\\
+  Ariel University\\
+  \texttt{yair.smadar1@gmail.com} \\
+  % examples of more authors
+  \And
+  Assaf Hoogi \\
+  School of Computer Science\\
+  Ariel University\\
+  \texttt{assafh@ariel.ac.il} \\
+  % \texttt{email} \\
+  % \AND
+  % Coauthor \\
+  % Affiliation \\
+  % Address \\
+  % \texttt{email} \\
+  % \And
+  % Coauthor \\
+  % Affiliation \\
+  % Address \\
+  % \texttt{email} \\
+  % \And
+  % Coauthor \\
+  % Affiliation \\
+  % Address \\
+  % \texttt{email} \\
+}
+
+
+\begin{document}
+
+
+\maketitle
+
+
+\begin{abstract}
+\input{abstract}
+\end{abstract}
+
+
+\section{Introduction}
+\input{introduction}
+
+\begin{figure}
+  \centering
+  {\includegraphics[width=13cm]{images/Normaliozations blocks.drawio.png}} 
+  \caption{\textbf{Normalization methods.} Each subplot represents a feature map tensor, where \( N \) denotes the batch axis, \( C \) the channel axis, and \( (H, W) \) the spatial axes. The pixels highlighted in colors are standardized by a shared mean and variance, calculated by pooling their values.}
+    \label{fig:norm_methods}
+\end{figure}
+
+\section{Related work}
+\input{related_work}
+
+\section{Adaptive group normalization}
+\input{agn-explained}
+
+\section{Theoretical Background}
+\input{theoretical-background}
+
+\section{Experiments}
+\input{experiments}
+
+
+\begin{figure}
+  \centering
+  \fbox{\includegraphics[width=13cm]{images/diagram.png}} 
+  \caption{\textbf{AGN Scheduler}}
+  \label{fig:agn_scheduler}
+\end{figure}
+
+
+\subsection{Tables}
+
+All tables must be centered, neat, clean, and legible.  The table number and
+title always appear before the table.  See Table~\ref{sample-table}.
+
+
+Note that publication-quality tables \emph{do not contain vertical rules.} We
+strongly suggest the use of the \verb+booktabs+ package, which allows for
+typesetting high-quality, professional tables:
+\begin{center}
+  \url{https://www.ctan.org/pkg/booktabs}
+\end{center}
+This package was used to typeset Table~\ref{sample-table}.
+
+
+\subsection{Math}
+Note that displaying math in bare TeX commands will not create correct line numbers for submission. Please use LaTeX (or AMSTeX) commands for unnumbered display math. (You really shouldn't be using \$\$ anyway; see \url{https://tex.stackexchange.com/questions/503/why-is-preferable-to} and \url{https://tex.stackexchange.com/questions/40492/what-are-the-differences-between-align-equation-and-displaymath} for more information.)
+
+\subsection{Final instructions}
+
+Do not change any aspects of the formatting parameters in the style files.  In
+particular, do not modify the width or length of the rectangle the text should
+fit into, and do not change font sizes (except perhaps in the
+\textbf{References} section; see below). Please note that pages should be
+numbered.
+
+
+\section{Preparing PDF files}
+
+
+Please prepare submission files with paper size ``US Letter,'' and not, for
+example, ``A4.''
+
+
+Fonts were the main cause of problems in the past years. Your PDF file must only
+contain Type 1 or Embedded TrueType fonts. Here are a few instructions to
+achieve this.
+
+
+\begin{itemize}
+
+
+\item You should directly generate PDF files using \verb+pdflatex+.
+
+
+\item You can check which fonts a PDF files uses.  In Acrobat Reader, select the
+  menu Files$>$Document Properties$>$Fonts and select Show All Fonts. You can
+  also use the program \verb+pdffonts+ which comes with \verb+xpdf+ and is
+  available out-of-the-box on most Linux machines.
+
+
+\item \verb+xfig+ "patterned" shapes are implemented with bitmap fonts.  Use
+  "solid" shapes instead.
+
+
+\item The \verb+\bbold+ package almost always uses bitmap fonts.  You should use
+  the equivalent AMS Fonts:
+\begin{verbatim}
+   \usepackage{amsfonts}
+\end{verbatim}
+followed by, e.g., \verb+\mathbb{R}+, \verb+\mathbb{N}+, or \verb+\mathbb{C}+
+for $\mathbb{R}$, $\mathbb{N}$ or $\mathbb{C}$.  You can also use the following
+workaround for reals, natural and complex:
+\begin{verbatim}
+   \newcommand{\RR}{I\!\!R} %real numbers
+   \newcommand{\Nat}{I\!\!N} %natural numbers
+   \newcommand{\CC}{I\!\!\!\!C} %complex numbers
+\end{verbatim}
+Note that \verb+amsfonts+ is automatically loaded by the \verb+amssymb+ package.
+
+
+\end{itemize}
+
+
+If your file contains type 3 fonts or non embedded TrueType fonts, we will ask
+you to fix it.
+
+
+\subsection{Margins in \LaTeX{}}
+
+
+Most of the margin problems come from figures positioned by hand using
+\verb+\special+ or other commands. We suggest using the command
+\verb+\includegraphics+ from the \verb+graphicx+ package. Always specify the
+figure width as a multiple of the line width as in the example below:
+\begin{verbatim}
+   \usepackage[pdftex]{graphicx} ...
+   \includegraphics[width=0.8\linewidth]{myfile.pdf}
+\end{verbatim}
+See Section 4.4 in the graphics bundle documentation
+(\url{http://mirrors.ctan.org/macros/latex/required/graphics/grfguide.pdf})
+
+
+A number of width problems arise when \LaTeX{} cannot properly hyphenate a
+line. Please give LaTeX hyphenation hints using the \verb+\-+ command when
+necessary.
+
+
+\begin{ack}
+Use unnumbered first level headings for the acknowledgments. All acknowledgments
+go at the end of the paper before the list of references. Moreover, you are required to declare
+funding (financial activities supporting the submitted work) and competing interests (related financial activities outside the submitted work).
+More information about this disclosure can be found at: \url{https://neurips.cc/Conferences/2023/PaperInformation/FundingDisclosure}.
+
+
+Do {\bf not} include this section in the anonymized submission, only in the final paper. You can use the \texttt{ack} environment provided in the style file to autmoatically hide this section in the anonymized submission.
+\end{ack}
+
+
+
+\section{Supplementary Material}
+
+Authors may wish to optionally include extra information (complete proofs, additional experiments and plots) in the appendix. All such materials should be part of the supplemental material (submitted separately) and should NOT be included in the main submission.
+
+
+\section*{References}
+
+
+References follow the acknowledgments in the camera-ready paper. Use unnumbered first-level heading for
+the references. Any choice of citation style is acceptable as long as you are
+consistent. It is permissible to reduce the font size to \verb+small+ (9 point)
+when listing the references.
+Note that the Reference section does not count towards the page limit.
+\medskip
+
+
+{
+\small
+
+
+[1] Alexander, J.A.\ \& Mozer, M.C.\ (1995) Template-based algorithms for
+connectionist rule extraction. In G.\ Tesauro, D.S.\ Touretzky and T.K.\ Leen
+(eds.), {\it Advances in Neural Information Processing Systems 7},
+pp.\ 609--616. Cambridge, MA: MIT Press.
+
+
+[2] Bower, J.M.\ \& Beeman, D.\ (1995) {\it The Book of GENESIS: Exploring
+  Realistic Neural Models with the GEneral NEural SImulation System.}  New York:
+TELOS/Springer--Verlag.
+
+
+[3] Hasselmo, M.E., Schnell, E.\ \& Barkai, E.\ (1995) Dynamics of learning and
+recall at excitatory recurrent synapses and cholinergic modulation in rat
+hippocampal region CA3. {\it Journal of Neuroscience} {\bf 15}(7):5249-5262.
+}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+\end{document}

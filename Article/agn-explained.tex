@@ -1,0 +1,69 @@
+Adaptive Group Normalization (AGN) proposes a novel dynamic approach to enhance the efficacy of deep learning models through the strategic exploitation of the statistical characteristics inherent in network channels. This methodology is underpinned by two principal components: the AGN scheduler and the channel re-clustering mechanism.
+
+\subsection{AGN Scheduler}
+The AGN scheduler serves as an autonomous system engineered to ascertain the optimal junctures for channel re-clustering, predicated on their statistical attributes. The scheduler's decision-making paradigm is governed by multiple parameters:
+
+\begin{enumerate}
+    \item The designated epoch for initiating the first clustering (\(E_{init}\)).
+    \item The epoch intervals designated for subsequent re-clustering events (\(E_{interval}\)). This regimen is meticulously applied to each AGN layer within the initial mini-batch of the corresponding epoch. The rationale behind this strategy is predicated on the hypothesis that each filter, by engendering a new channel, aligns the output within a uniform statistical framework.
+    \item Maximum re-clustering epoch, Marks in which epoch to stop performing channel re-clustering, and stay with the last established channel clusters (\(E_{max}\)).
+\end{enumerate}
+
+Empirical analyses advocate that an interval setting of \(E_{init} = 0\), \(E_{interval} = 20\) and \(E_{max} = 50\) is conducive to achieving optimal outcomes.
+
+\subsection{Reclustering Channels}
+The re-clustering mechanism is articulated as follows:
+
+\begin{enumerate}
+    \item For every channel within the mini-batch, the statistical attributes are computed as \[(statics_i = (\mu_{channel_i}, \sigma^2_{channel_i}))\], wherein \(\mu_{channel_i}\) and \(\sigma^2_{channel_i}\) represent the mean and variance of the \(i\)-th channel, respectively.
+    
+    \item An outlier detection algorithm, exemplified by IsolationForest, is employed to excise outliers from the set \[Statics = \{ statics_0, statics_1, \ldots, statics_n \}\].
+
+    
+    \item Subsequent to outlier removal, the mean (\(\mu_{C_i}\)) and variance (\(\sigma^2_{C_i}\)) for the residual channels are recalculated, with \(C_i\) denoting the \(i\)-th channel in each image of the mini-batch.
+    
+    \item Given a batch size denoted as \((N, C, H, W)\), this procedure culminates in \(C\) points of \((\mu_{C_i}, \sigma^2_{C_i})\).
+    
+    \item The KMeans algorithm is subsequently utilized to cluster the \(C\) points into \(G\) unique groups, where \(G\) is a predetermined parameter specifying the number of groups and aligns with the GN parameter. This process results in the creation of channel clusters, denoted as \(K\).
+\end{enumerate}
+
+\subsection{Normalization According to the clustering results}
+In the course of training, as data traverses through the normalization layer, channels are apportioned into groups in alignment with \(K\), with each group undergoing normalization in conformity with established norms. Analogous to Group Normalization (GN), AGN incorporates learnable parameters \(\alpha\) and \(\beta\) for each channel, which are iteratively updated in a process akin to that of GN.
+
+This meticulously structured paradigm of dynamic channel normalization, encapsulated by AGN, significantly refines the training process. It achieves this by judiciously adjusting the normalization groups in response to the evolving statistical dynamics of the data, thereby substantially enhancing model convergence and performance.
+
+
+\begin{algorithm}
+\caption{Adaptive Group Normalization Procedure}
+\begin{algorithmic}[1]
+\State \textbf{Input:} Input mini-batch $X \in \mathbb{R}^{N \times C \times H \times W}$, epoch count $E$, initial clustering epoch $E_{init}$, clustering interval $E_{interval}$, maximum re-clustering $E_{max}$, number of target groups $G$.
+\State \textbf{Output:} Normalized output tensor $Y$.
+
+\Procedure{ScheduleClustering}{$E, E_{init}, E_{interval}, E_{max}$}
+    \If{($E_{init} <= E <= E_{max}$  \textbf{and} $(E - E_{init}) \mod E_{interval} = 0$)}
+        \State Invoke \Call{ReclusterChannels}{}
+    \Else
+        \State Invoke \Call{NormalizeChannels}{}
+    \EndIf
+\EndProcedure
+
+\Procedure{ReclusterChannels}{$X, G$}
+    \For{each channel $i \in \{1, \ldots, C*N\}$} \Comment{$N=Batch size, C=\#channels$}
+        \State Compute $statics_i = \left(\mu_{channel_i}, \sigma^2_{channel_i}\right)$. 
+    \EndFor
+    \State Apply IsolationForest on $\{ statics_0, statics_1, \ldots, statics_{N*C} \}$ for outlier removal.
+    \State For non-outlier channels, recalculate $\mu_{C_i}$ and $\sigma^2_{C_i}$ for each $i \in C$.
+    \State Employ KMeans to partition $C$ points into $G$ clusters, yielding grouping $K$.
+    \State Invoke \Call{NormalizeChannels}{}
+\EndProcedure
+
+\Procedure{NormalizeChannels} {$X, K$}
+    \For{each cluster $k \in K$}
+        \State Partition $X$ according to cluster assignments in $k$.
+        \State Normalize each partitioned group following GN principles.
+    \EndFor
+    \State \textbf{return} Normalized output $Y$.
+\EndProcedure
+
+\end{algorithmic}
+\end{algorithm}
