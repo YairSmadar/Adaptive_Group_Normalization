@@ -16,13 +16,14 @@ Tutorial:   https://docs.ultralytics.com/yolov5/tutorials/train_custom_data
 """
 
 import argparse
+import json
 import math
 import os
 import random
 import subprocess
 import sys
 import time
-from copy import deepcopy
+from copy import deepcopy, copy
 from datetime import datetime
 from pathlib import Path
 
@@ -30,6 +31,7 @@ import numpy as np
 import torch
 import torch.distributed as dist
 import torch.nn as nn
+import wandb
 import yaml
 from torch.optim import lr_scheduler
 from tqdm import tqdm
@@ -41,8 +43,8 @@ if str(ROOT) not in sys.path:
 ROOT = Path(os.path.relpath(ROOT, Path.cwd()))  # relative
 
 import segment.val as validate  # for end-of-epoch mAP
-from models.experimental import attempt_load
-from models.yolo import SegmentationModel
+from yolov5.models.experimental import attempt_load
+from yolov5.models.yolo import SegmentationModel
 from utils.autoanchor import check_anchors
 from utils.autobatch import check_train_batch_size
 from utils.callbacks import Callbacks
@@ -66,6 +68,53 @@ WORLD_SIZE = int(os.getenv('WORLD_SIZE', 1))
 GIT_INFO = check_git_info()
 
 
+def generate_wandb_name(args):
+    model_name = args.cfg.split('/')[1].split('.')[0]
+    wanda_test_name = model_name
+
+    wanda_test_name += '_seg'
+
+    data = args.data.split('/')[1].split('.')[0]
+    wanda_test_name += f"_{data}"
+
+    wanda_test_name += f"_{args.method}"
+
+    if args.method in {'SGN', 'RGN'}:
+        wanda_test_name += f'_V{args.AGN_version}'
+
+        if args.use_VGN:
+            wanda_test_name += f'_use-VGN'
+
+        if args.epoch_start_cluster != 0:
+            wanda_test_name += f'_epoch-start-cluster-{args.epoch_start_cluster}'
+
+        wanda_test_name += f'_every-{args.num_of_epch_to_shuffle}'
+
+        if args.max_norm_shuffle != 1000:
+            wanda_test_name += f'_max-{args.max_norm_shuffle}'
+
+        if args.no_shuff_best_k_p != 1.0:
+            wanda_test_name += f'_ns-{args.no_shuff_best_k_p}'
+
+        if args.shuff_thrs_std_only:
+            if args.std_threshold_l != -1:
+                # sto = shuffle threshold only
+                wanda_test_name += f'_sto-{args.std_threshold_l}-{args.std_threshold_h}'
+            else:
+                wanda_test_name += f'_sto-{args.std_threshold_h}'
+
+    wanda_test_name += f'_bs-{args.batch_size}'
+
+    if args.group_by_size:
+        wanda_test_name += f'_gs-{args.group_norm_size}'
+    else:
+        wanda_test_name += f'_num-of-groups-{args.group_norm}'
+
+    wanda_test_name += f'_seed-{args.seed}'
+
+    return wanda_test_name
+
+
 def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictionary
     save_dir, epochs, batch_size, weights, single_cls, evolve, data, cfg, resume, noval, nosave, workers, freeze, mask_ratio = \
         Path(opt.save_dir), opt.epochs, opt.batch_size, opt.weights, opt.single_cls, opt.evolve, opt.data, opt.cfg, \
@@ -76,6 +125,17 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
     w = save_dir / 'weights'  # weights dir
     (w.parent if evolve else w).mkdir(parents=True, exist_ok=True)  # make dir
     last, best = w / 'last.pt', w / 'best.pt'
+
+    if wandb and opt.use_wandb:
+        wandb.init(project="Adaptive_Normalization",
+                   entity="the-smadars",
+                   name=generate_wandb_name(opt),
+                   config=opt)
+        wandb.run.summary["best_precision"] = 0
+        wandb.run.summary["best_recall"] = 0
+        wandb.run.summary["best_mAP@0.5:0.95"] = 0
+        wandb.run.summary["best_mAP@0.5"] = 0
+        wandb.run.summary["best_total"] = 0
 
     # Hyperparameters
     if isinstance(hyp, str):
@@ -92,7 +152,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
     # Loggers
     data_dict = None
     if RANK in {-1, 0}:
-        logger = GenericLogger(opt=opt, console_logger=LOGGER)
+        logger = GenericLogger(opt=opt, console_logger=LOGGER, include=('tb'))
 
     # Config
     plots = not evolve and not opt.noplots  # create plots
@@ -106,6 +166,31 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
     names = {0: 'item'} if single_cls and len(data_dict['names']) != 1 else data_dict['names']  # class names
     is_coco = isinstance(val_path, str) and val_path.endswith('coco/val2017.txt')  # COCO dataset
 
+    normalization_args = \
+        {
+            "version": opt.AGN_version,
+            "norm_factory_args":
+                {
+                    "method": opt.method,
+                    "group_by_size": opt.group_by_size,
+                    "group_norm_size": opt.group_norm_size,
+                    "group_norm": opt.group_norm,
+                },
+            "SGN_args":
+                {
+                    "eps": opt.eps,
+                    "no_shuff_best_k_p": opt.no_shuff_best_k_p,
+                    "shuff_thrs_std_only": opt.shuff_thrs_std_only,
+                    "std_threshold_l": opt.std_threshold_l,
+                    "std_threshold_h": opt.std_threshold_h,
+                    "keep_best_group_num_start": opt.keep_best_group_num_start,
+                    "use_VGN": opt.use_VGN,
+                    "VGN_min_gs_mul": opt.VGN_min_gs_mul,
+                    "VGN_max_gs_mul": opt.VGN_max_gs_mul
+                },
+
+        }
+
     # Model
     check_suffix(weights, '.pt')  # check weights
     pretrained = weights.endswith('.pt')
@@ -113,14 +198,16 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
         with torch_distributed_zero_first(LOCAL_RANK):
             weights = attempt_download(weights)  # download if not found locally
         ckpt = torch.load(weights, map_location='cpu')  # load checkpoint to CPU to avoid CUDA memory leak
-        model = SegmentationModel(cfg or ckpt['model'].yaml, ch=3, nc=nc, anchors=hyp.get('anchors')).to(device)
+        model = SegmentationModel(cfg or ckpt['model'].yaml, ch=3, nc=nc, anchors=hyp.get('anchors'),
+                                  normalization_args={**normalization_args}).to(device)
         exclude = ['anchor'] if (cfg or hyp.get('anchors')) and not resume else []  # exclude keys
         csd = ckpt['model'].float().state_dict()  # checkpoint state_dict as FP32
         csd = intersect_dicts(csd, model.state_dict(), exclude=exclude)  # intersect
         model.load_state_dict(csd, strict=False)  # load
         LOGGER.info(f'Transferred {len(csd)}/{len(model.state_dict())} items from {weights}')  # report
     else:
-        model = SegmentationModel(cfg, ch=3, nc=nc, anchors=hyp.get('anchors')).to(device)  # create
+        model = SegmentationModel(cfg, ch=3, nc=nc, anchors=hyp.get('anchors'),
+                                  normalization_args={**normalization_args}).to(device)  # create
     amp = check_amp(model)  # check AMP
 
     # Freeze
@@ -406,7 +493,39 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                     logger.log_model(w / f'epoch{epoch}.pt')
                 del ckpt
                 # callbacks.run('on_model_save', last, epoch, final_epoch, best_fitness, fi)
+            if wandb and opt.use_wandb:
+                precision, recall, ap, ap50, val_loss_box, val_loss_obj, val_loss_cls = results
+                f1 = 2 * (precision * recall) / (precision + recall)
 
+                best_total = fitness(
+                    np.array(results).reshape(1, -1))  # weighted combination of [P, R, mAP@.5, mAP@.5-.95]
+
+                wandb.log({"test precision": precision,
+                           "test recall": recall,
+                           "test f1": f1,
+                           "mAP@0.5:0.95": ap,
+                           "mAP@0.5": ap50,
+                           })
+
+                wandb.run.summary["best_precision"] = \
+                    precision if precision >= wandb.run.summary["best_precision"] \
+                        else wandb.run.summary["best_precision"]
+
+                wandb.run.summary["best_recall"] = \
+                    recall if recall >= wandb.run.summary["best_recall"] \
+                        else wandb.run.summary["best_recall"]
+
+                wandb.run.summary["best_mAP@0.5:0.95"] = \
+                    ap if ap >= wandb.run.summary["best_mAP@0.5:0.95"] \
+                        else wandb.run.summary["best_mAP@0.5:0.95"]
+
+                wandb.run.summary["best_mAP@0.5"] = \
+                    ap50 if ap50 >= wandb.run.summary["best_mAP@0.5"] \
+                        else wandb.run.summary["best_mAP@0.5"]
+
+                wandb.run.summary["best_total"] = \
+                    best_total if best_total >= wandb.run.summary["best_total"] \
+                        else wandb.run.summary["best_total"]
         # EarlyStopping
         if RANK != -1:  # if DDP training
             broadcast_list = [stop if RANK == 0 else None]
@@ -464,7 +583,8 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
 
 def parse_opt(known=False):
     parser = argparse.ArgumentParser()
-    parser.add_argument('--weights', type=str, default=ROOT / 'yolov5s-seg.pt', help='initial weights path')
+    parser.add_argument('--config', type=str, required=True)
+    parser.add_argument('--weights', type=str, default=None, help='initial weights path')
     parser.add_argument('--cfg', type=str, default='', help='model.yaml path')
     parser.add_argument('--data', type=str, default=ROOT / 'data/coco128-seg.yaml', help='dataset.yaml path')
     parser.add_argument('--hyp', type=str, default=ROOT / 'data/hyps/hyp.scratch-low.yaml', help='hyperparameters path')
@@ -661,6 +781,25 @@ def run(**kwargs):
     return opt
 
 
+def apply_config(args: argparse.Namespace, config_path: str):
+    """Overwrite the values in an arguments object by values of namesake
+    keys in a JSON config file.
+
+    :param args: The arguments object
+    :param config_path: the path to a config JSON file.
+    """
+    config_path = copy(config_path)
+    if config_path:
+        # Opening JSON file
+        f = open(config_path)
+        config_overwrite = json.load(f)
+        for k, v in config_overwrite.items():
+            if k.startswith('_'):
+                continue
+            setattr(args, k, v)
+
+
 if __name__ == '__main__':
     opt = parse_opt()
+    apply_config(opt, opt.config)
     main(opt)

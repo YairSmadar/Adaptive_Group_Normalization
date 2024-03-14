@@ -18,6 +18,7 @@ import torch.distributed as dist
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.parallel import DistributedDataParallel as DDP
+from agn_src.similarity_group_normalization import SimilarityGroupNorm as sgn
 
 from utils.general import LOGGER, check_version, colorstr, file_date, git_describe
 
@@ -245,28 +246,40 @@ def prune(model, amount=0.3):
     LOGGER.info(f'Model pruned to {sparsity(model):.3g} global sparsity')
 
 
-def fuse_conv_and_bn(conv, bn):
-    # Fuse Conv2d() and BatchNorm2d() layers https://tehnokv.com/posts/fusing-batchnorm-and-conv/
-    fusedconv = nn.Conv2d(conv.in_channels,
-                          conv.out_channels,
-                          kernel_size=conv.kernel_size,
-                          stride=conv.stride,
-                          padding=conv.padding,
-                          dilation=conv.dilation,
-                          groups=conv.groups,
-                          bias=True).requires_grad_(False).to(conv.weight.device)
+def fuse_conv_and_bn(conv, norm):
+    # Check norm layer type and prepare normalization parameters
+    if isinstance(norm, nn.BatchNorm2d):
+        scale = norm.weight / torch.sqrt(norm.running_var + norm.eps)
+        bias = norm.bias - norm.weight * norm.running_mean / torch.sqrt(norm.running_var + norm.eps)
+    elif isinstance(norm, nn.GroupNorm):
+        scale = norm.weight / torch.sqrt(torch.tensor(norm.eps))
+        bias = norm.bias
+    elif isinstance(norm, sgn):
+        scale = norm.groupNorm.weight / torch.sqrt(torch.tensor(norm.eps))
+        bias = norm.groupNorm.bias
+    else:
+        raise TypeError("Normalization layer must be either BatchNorm2d or GroupNorm.")
+
+    # Initialize the fused convolutional layer
+    fused_conv = nn.Conv2d(conv.in_channels,
+                           conv.out_channels,
+                           kernel_size=conv.kernel_size,
+                           stride=conv.stride,
+                           padding=conv.padding,
+                           dilation=conv.dilation,
+                           groups=conv.groups,
+                           bias=True).requires_grad_(False).to(conv.weight.device)
 
     # Prepare filters
     w_conv = conv.weight.clone().view(conv.out_channels, -1)
-    w_bn = torch.diag(bn.weight.div(torch.sqrt(bn.eps + bn.running_var)))
-    fusedconv.weight.copy_(torch.mm(w_bn, w_conv).view(fusedconv.weight.shape))
+    w_norm = torch.diag(scale)
+    fused_conv.weight.copy_(torch.mm(w_norm, w_conv).view(fused_conv.weight.shape))
 
     # Prepare spatial bias
     b_conv = torch.zeros(conv.weight.size(0), device=conv.weight.device) if conv.bias is None else conv.bias
-    b_bn = bn.bias - bn.weight.mul(bn.running_mean).div(torch.sqrt(bn.running_var + bn.eps))
-    fusedconv.bias.copy_(torch.mm(w_bn, b_conv.reshape(-1, 1)).reshape(-1) + b_bn)
+    fused_conv.bias.copy_(torch.mm(w_norm, b_conv.reshape(-1, 1)).reshape(-1) + bias)
 
-    return fusedconv
+    return fused_conv
 
 
 def model_info(model, verbose=False, imgsz=640):

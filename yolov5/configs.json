@@ -8,7 +8,7 @@
             {
                 "cfg": "models/yolov5s.yaml",
                 "seed": 0,
-                "batch_size": 16,
+                "batch_size": 32,
                 "group_norm_size": 32,
                 "method": "GN"
             },

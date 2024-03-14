@@ -6,27 +6,7 @@
     "train_configs": 
     [
         {
-            "seed": 0,
-            "method": "SGN",
-            "use_VGN": true
-        },
-
-        {
-            "seed": 1,
-            "method": "GN"
-        },
-        {
-            "method": "SGN",
-            "use_VGN": false
-        },
-        {
-            "method": "SGN",
-            "use_VGN": true
-        },
-
-
-        {
-            "seed": 2,
+            "seed": 3,
             "method": "GN"
         },
         {

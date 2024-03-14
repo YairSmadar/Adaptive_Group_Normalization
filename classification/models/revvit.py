@@ -79,10 +79,10 @@ class RevViT(nn.Module):
         # linear layer + LN for simplicity.
         self.head = nn.Linear(2 * self.embed_dim, num_classes, bias=True)
 
-        if self.normalization_factory.method == 'LN':
-            self.norm = nn.LayerNorm(2 * self.embed_dim)
-        else:
-            self.norm = self.normalization_factory.create_norm2d(3)
+        # if self.normalization_factory.method == 'LN':
+        self.norm = nn.LayerNorm(2 * self.embed_dim)
+        # else:
+        #     self.norm = self.normalization_factory.create_norm2d(3)
 
     @staticmethod
     def vanilla_backward(h, layers):
@@ -124,13 +124,13 @@ class RevViT(nn.Module):
         x = x.mean(1)
 
         # head pre-norm
-        if self.normalization_factory.method == 'LN':
-            x = self.norm(x)
-        else:
-            x_shape = x.shape
-            x = x.reshape(N // 2, C, H, W)
-            x = self.norm(x)
-            x = x.reshape(x_shape)
+        # if self.normalization_factory.method == 'LN':
+        x = self.norm(x)
+        # else:
+        #     x_shape = x.shape
+        #     x = x.reshape(N // 2, C, H, W)
+        #     x = self.norm(x)
+        #     x = x.reshape(x_shape)
 
         # pre-softmax logits
         x = self.head(x)
