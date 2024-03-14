@@ -130,7 +130,6 @@ class SimilarityGroupNorm(nn.Module):
         self.validate_new_indexes(Conv_input)
         self.recluster_num += 1
 
-
     def SimilarityGroupNormClustering(self, channels_input):
         N, C, H, W = channels_input.size()
         if self.strategy is not None:
@@ -148,7 +147,7 @@ class SimilarityGroupNorm(nn.Module):
 
             should_keep_best_groups = \
                 self.keep_best_std_groups and \
-                self.keep_best_group_num_start >= self.recluster_num
+                self.recluster_num >= self.keep_best_group_num_start
 
             if should_keep_best_groups:
                 filtered_channels_input, best_std_channels_idx, N_best_groups = \
@@ -300,6 +299,7 @@ class SimilarityGroupNorm(nn.Module):
             no_shuff_best_k = math.floor(
                 self.num_groups * self.no_shuff_best_k_p)
             values, indices = torch.topk(-stds, no_shuff_best_k)
+            self.new_num_groups = self.num_groups - len(indices)
             return indices.sort().values
 
     def get_channels_clustering_for_eval(self, channels_input: torch.Tensor,
