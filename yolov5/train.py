@@ -100,6 +100,7 @@ def generate_wandb_name(args):
 
         if args.use_VGN:
             wanda_test_name += f'_use-VGN'
+            wanda_test_name += f'_gser-{args.VGN_gs_extra_range}'
 
         if args.epoch_start_cluster != 0:
             wanda_test_name += f'_epoch-start-cluster-{args.epoch_start_cluster}'
@@ -108,16 +109,6 @@ def generate_wandb_name(args):
 
         if args.max_norm_shuffle != 1000:
             wanda_test_name += f'_max-{args.max_norm_shuffle}'
-
-        if args.no_shuff_best_k_p != 1.0:
-            wanda_test_name += f'_ns-{args.no_shuff_best_k_p}'
-
-        if args.shuff_thrs_std_only:
-            if args.std_threshold_l != -1:
-                # sto = shuffle threshold only
-                wanda_test_name += f'_sto-{args.std_threshold_l}-{args.std_threshold_h}'
-            else:
-                wanda_test_name += f'_sto-{args.std_threshold_h}'
 
     wanda_test_name += f'_bs-{args.batch_size}'
 
@@ -198,16 +189,16 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                     "method": opt.method,
                     "group_by_size": opt.group_by_size,
                     "group_norm_size": opt.group_norm_size,
-                    "group_norm": opt.group_norm,
+                    "group_norm": -1,
                 },
             "SGN_args":
                 {
                     "eps": opt.eps,
-                    "no_shuff_best_k_p": opt.no_shuff_best_k_p,
-                    "shuff_thrs_std_only": opt.shuff_thrs_std_only,
-                    "std_threshold_l": opt.std_threshold_l,
-                    "std_threshold_h": opt.std_threshold_h,
-                    "keep_best_group_num_start": opt.keep_best_group_num_start,
+                    "no_shuff_best_k_p": 1,
+                    "shuff_thrs_std_only": False,
+                    "std_threshold_l": 0,
+                    "std_threshold_h": 0,
+                    "keep_best_group_num_start": False,
                     "use_VGN": opt.use_VGN,
                     "VGN_min_gs_mul": 1 - opt.VGN_gs_extra_range,
                     "VGN_max_gs_mul": 1 + opt.VGN_gs_extra_range
@@ -359,9 +350,9 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
     stopper, stop = EarlyStopping(patience=opt.patience), False
     compute_loss = ComputeLoss(model)  # init loss class
 
-    sgn_scheduler = AGNScheduler(model=model, epoch_start_cluster=opt.epoch_start_cluster,
+    agn_scheduler = AGNScheduler(model=model, epoch_start_cluster=opt.epoch_start_cluster,
                                  num_of_epch_to_shuffle=opt.num_of_epch_to_shuffle,
-                                 riar=opt.riar,
+                                 riar=1,
                                  max_norm_shuffle=opt.max_norm_shuffle)
 
     callbacks.run('on_train_start')
@@ -392,7 +383,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
 
         model.train()
 
-        sgn_scheduler.step()
+        agn_scheduler.step()
 
         # Update image weights (optional, single-GPU only)
         if opt.image_weights:

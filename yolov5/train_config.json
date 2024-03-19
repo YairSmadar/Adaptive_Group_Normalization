@@ -10,7 +10,7 @@
     "num_of_epch_to_shuffle": 20,
     "max_norm_shuffle": 50,
     "data": "data/coco.yaml",
-    "cfg": "models/yolov5s.yaml",
+    "cfg": "models/yolov5n.yaml",
     "use_wandb": true,
     "seed": 0,
     "epochs": 200,

@@ -74,7 +74,7 @@ class NormalizationFactory:
         # if m == 0:
         #     return 1  # one group
         # If X divided by M is already a natural number, and M is an integer, return M
-        if m is not 0 and x % m == 0:
+        if m != 0 and x % m == 0:
             return int(m)  # Return M as an integer
 
         closest_divisor = None

@@ -34,10 +34,10 @@ class SimilarityGroupNorm(nn.Module):
         self.group_size = int(num_channels / num_groups)
         self.cluster_sizes = torch.IntTensor([self.group_size] * num_groups)
 
-        if use_VGN:
-            self.groupNorm = VariableGroupNorm(num_channels, self.cluster_sizes, eps=eps, device=device_name)
-        else:
+        if not use_VGN or num_groups == 1:
             self.groupNorm = GroupNorm(num_groups, num_channels, eps=eps)
+        else:
+            self.groupNorm = VariableGroupNorm(num_channels, self.cluster_sizes, eps=eps, device=device_name)
         self.indexes = None
         self.reverse_indexes = None
         self.groups_representation_num = None  # not used
@@ -70,7 +70,7 @@ class SimilarityGroupNorm(nn.Module):
     def forward(self, input_tensor: torch.Tensor):
 
         # start shuffle at epoch > 0
-        if self.use_gn:
+        if self.use_gn or self.num_groups == 1:
             return self.groupNorm(input_tensor)
 
         if self.need_to_recluster:

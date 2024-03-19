@@ -54,11 +54,11 @@ class VariableGroupNorm(torch.nn.Module):
             normalized_groups.append(x_group_normalized)
 
         # Concatenate all normalized groups
-        normalized_tensor = torch.cat(normalized_groups, dim=1)
+        normalized_tensor = torch.cat(normalized_groups, dim=1).to(x.device)
 
         # Scale and shift using weight and bias for each channel
-        weight_expanded = self.weight.view(1, C, 1)
-        bias_expanded = self.bias.view(1, C, 1)
+        weight_expanded = self.weight.view(1, C, 1).to(x.device)
+        bias_expanded = self.bias.view(1, C, 1).to(x.device)
 
         out = normalized_tensor * weight_expanded + bias_expanded
         out = out.view(N, C, H, W)
