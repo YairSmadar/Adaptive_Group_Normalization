@@ -6,7 +6,7 @@
     "train_configs": 
     [
         {
-            "seed": 3,
+            "seed": 4,
             "method": "GN"
         },
         {

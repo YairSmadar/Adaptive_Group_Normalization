@@ -14,6 +14,9 @@
             },
 
             {
+                "epoch_start_cluster": 0,
+                "num_of_epch_to_shuffle": 20,
+                "max_norm_shuffle": 50,
                 "method": "SGN",
                 "use_VGN": false
 
