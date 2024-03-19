@@ -1,0 +1,28 @@
+{
+  "AGN_version": 14,
+  "method": "SGN",
+  "group_by_size": true,
+  "group_norm_size": 32,
+  "group_norm": 16,
+  "use_VGN": true,
+  "VGN_gs_extra_range": 0.2,
+  "eps": 1e-12,
+  "no_shuff_best_k_p": 1.0,
+  "shuff_thrs_std_only": false,
+  "std_threshold_l": 0,
+  "std_threshold_h": 1,
+  "keep_best_group_num_start": 0,
+
+  "epoch_start_cluster": 0,
+  "num_of_epch_to_shuffle": 20,
+  "max_norm_shuffle": 50,
+  "riar": 1,
+
+  "data": "data/coco128.yaml",
+  "cfg": "models/yolov5s.yaml",
+  "use_wandb": true,
+  "seed": 0,
+  "epochs": 100,
+  "batch_size": 16,
+  "noplots": true
+}
