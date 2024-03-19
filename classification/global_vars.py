@@ -308,6 +308,7 @@ def generate_wandb_name():
 
         if args.use_VGN:
             wanda_test_name += f'_use-VGN'
+            wanda_test_name += f'_gser-{args.VGN_gs_extra_range}'
 
         if args.epoch_start_cluster != 0:
             wanda_test_name += f'_start-{args.epoch_start_cluster}'

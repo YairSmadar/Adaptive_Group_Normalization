@@ -14,10 +14,8 @@
             {
                 "method": "SGN",
                 "use_VGN": true,
-                "VGN_min_gs_mul": 0.8,
-                "VGN_max_gs_mul": 1.2
+                "VGN_gs_extra_range": 0.2
             },
-
 
 
             {
