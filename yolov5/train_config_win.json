@@ -15,5 +15,6 @@
     "seed": 0,
     "epochs": 1,
     "batch_size": 32,
-    "noplots": true
+    "noplots": true,
+    "weights": ""
 }
