@@ -4,6 +4,10 @@ from torchvision.transforms import Normalize, Compose, RandomHorizontalFlip, ToT
 from torchvision.datasets import CIFAR100
 from torch.utils.data import DataLoader
 import numpy as np
+import torchvision.datasets as datasets
+import torchvision.transforms as transforms
+import os
+import torch
 
 """
 0: apple 1: aquarium_fish 2: baby 3: bear 4: beaver
@@ -103,12 +107,50 @@ def getLoaders(datasetName, gen, input_size=None):
                                   num_workers=global_vars.args.workers, pin_memory=True, generator=gen)
         val_loader = DataLoader(testset, batch_size=global_vars.args.batch_size, shuffle=False,
                                 num_workers=global_vars.args.workers, pin_memory=True)
-        if global_vars.args.method == 'SGN':
-            reclustringLoader = DataLoader(trainset, batch_size=global_vars.args.reclustring_bs, shuffle=True,
-                                           num_workers=global_vars.args.workers, pin_memory=True, generator=gen)
-        if global_vars.args.method == 'RGN':
-            reclustringLoader = DataLoader(trainset, batch_size=1, shuffle=True, num_workers=global_vars.args.workers,
-                                           pin_memory=True, generator=gen)
-        return train_loader, val_loader, reclustringLoader
+        H, W, C = train_loader.dataset.data.shape[1:]
+        return train_loader, val_loader, len(train_loader.dataset.classes), (C, H, W)
+
+    elif datasetName == 'imagenet':
+        # Data loading code
+        img_size = 224
+        if global_vars.args.dummy:
+            print("=> Dummy data is used!")
+            train_dataset = datasets.FakeData(128, (3, img_size, img_size), 200, transforms.ToTensor())
+            val_dataset = datasets.FakeData(64, (3, img_size, img_size), 200, transforms.ToTensor())
+        else:
+            traindir = os.path.join(global_vars.args.data_path, 'train')
+            valdir = os.path.join(global_vars.args.data_path, 'val')
+            normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                             std=[0.229, 0.224, 0.225])
+
+            train_dataset = datasets.ImageFolder(
+                traindir,
+                transforms.Compose([
+                    transforms.RandomResizedCrop(img_size),
+                    transforms.RandomHorizontalFlip(),
+                    transforms.ToTensor(),
+                    normalize,
+                ]))
+
+            val_dataset = datasets.ImageFolder(
+                valdir,
+                transforms.Compose([
+                    transforms.Resize(256),
+                    transforms.CenterCrop(224),
+                    transforms.ToTensor(),
+                    normalize,
+                ]))
+
+        train_loader = torch.utils.data.DataLoader(
+            train_dataset, batch_size=global_vars.args.batch_size, shuffle=False,
+            num_workers=global_vars.args.workers, pin_memory=True)
+
+        val_loader = torch.utils.data.DataLoader(
+            val_dataset, batch_size=global_vars.args.batch_size, shuffle=False,
+            num_workers=global_vars.args.workers, pin_memory=True)
+
+        n_classes = 200
+        shape = (3, img_size, img_size)
+        return train_loader, val_loader, n_classes, shape
     else:
         raise Exception("dataset isn't supported.")

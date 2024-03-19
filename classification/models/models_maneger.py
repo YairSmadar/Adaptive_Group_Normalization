@@ -1,4 +1,4 @@
-from classification.models import resnet50, mobilenetv2, densenet, efficientnet, revvit
+from classification.models import resnet50, mobilenetv2, densenet, efficientnet, revvit, resnet18
 import torch
 
 
@@ -14,7 +14,8 @@ class ModelsManeger:
             "densenet161": densenet.densenet161,
             "efficientnet-b0": efficientnet.efficientnet_b0,
             "efficientnet-b3": efficientnet.efficientnet_b3,
-            "revvit": revvit.revvit
+            "revvit": revvit.revvit,
+            "resnet18": resnet18.ResNet18
         }
 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
