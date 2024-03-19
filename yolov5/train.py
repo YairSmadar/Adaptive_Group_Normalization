@@ -198,7 +198,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                     "shuff_thrs_std_only": False,
                     "std_threshold_l": 0,
                     "std_threshold_h": 0,
-                    "keep_best_group_num_start": False,
+                    "keep_best_group_num_start": -1,
                     "use_VGN": opt.use_VGN,
                     "VGN_min_gs_mul": 1 - opt.VGN_gs_extra_range,
                     "VGN_max_gs_mul": 1 + opt.VGN_gs_extra_range

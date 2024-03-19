@@ -1,0 +1,25 @@
+{
+    "gpu_number": "3",
+    "train_script": "train.py",
+    "config_file_path": "train_config.json",
+
+    "train_configs": 
+    [
+            {
+                "cfg": "models/yolov5n.yaml",
+                "seed": 0,
+                "batch_size": 32,
+                "group_by_size": true,
+                "group_norm_size": 32,
+                "weights": "",
+                "method": "GN"
+
+            },
+            {
+                "seed": 1
+            },
+            {
+                "seed": 2
+            }
+    ]
+}
