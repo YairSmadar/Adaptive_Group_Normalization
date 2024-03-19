@@ -10,6 +10,9 @@
                 "seed": 0,
                 "batch_size": 32,
                 "group_norm_size": 32,
+                "method": "GN"
+            },
+            {
                 "method": "SGN",
                 "use_VGN": false,
                 "epoch_start_cluster": 0,
@@ -17,9 +20,6 @@
                 "max_norm_shuffle": 50
             },
 
-            {
-                "method": "GN"
-            },
             {
                 "method": "SGN",
                 "use_VGN": true,
