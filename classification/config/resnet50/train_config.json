@@ -18,7 +18,7 @@
   "riar": 1,
   "print_freq": 1250,
   "saveing_path": "saved_models/",
-  "seed": 0,
+  "seed": 4,
   "group_by_size": true,
   "group_norm_size": 32,
   "use_wandb": true,
