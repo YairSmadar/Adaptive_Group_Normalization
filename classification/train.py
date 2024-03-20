@@ -115,7 +115,7 @@ def main():
         C, H, W = train_loader.dataset.data.shape[0], args.input_size, args.input_size
 
     summary(model, (C, H, W))
-
+    print(f"C, H, W = {(C, H, W)}")
     model = DataParallel(model).to(global_vars.device)
 
     # define loss function (criterion) and optimizer
