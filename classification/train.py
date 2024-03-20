@@ -112,7 +112,7 @@ def main():
     if not hasattr(args, 'input_size'):
         C, H, W = data_shape
     else:
-        C, H, W = train_loader.dataset.data.shape[0], args.input_size, args.input_size
+        C, H, W = 3, args.input_size, args.input_size
     print(f"C, H, W = {(C, H, W)}")
 
     summary(model, (C, H, W))
