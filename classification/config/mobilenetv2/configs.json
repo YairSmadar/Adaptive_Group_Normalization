@@ -8,9 +8,6 @@
                 "seed": 0,
                 "method": "SGN",
                 "use_VGN": true,
-                "VGN_gs_extra_range": 0.1
-            },
-            {
                 "VGN_gs_extra_range": 0.3
             },
             {
