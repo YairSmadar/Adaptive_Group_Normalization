@@ -85,7 +85,7 @@ class Loggers():
         self.best_keys = ['best/epoch', 'best/precision', 'best/recall', 'best/mAP_0.5', 'best/mAP_0.5:0.95']
         for k in LOGGERS:
             setattr(self, k, None)  # init empty logger dictionary
-        self.csv = True  # always log to csv
+        self.csv = False  # always log to csv
 
         # Messages
         if not comet_ml:
