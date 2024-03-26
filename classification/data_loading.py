@@ -2,56 +2,37 @@ import global_vars
 
 from torchvision.transforms import Normalize, Compose, RandomHorizontalFlip, ToTensor, Resize
 from torchvision.datasets import CIFAR100
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 import numpy as np
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
 import os
 import torch
+from PIL import Image
+import pandas as pd
 
-"""
-0: apple 1: aquarium_fish 2: baby 3: bear 4: beaver
 
-5: bed 6: bee 7: beetle 8: bicycle 9: bottle 10: bowl
+class TinyImageNetVal(Dataset):
+    def __init__(self, root_dir, annotation_file, transform=None):
+        self.root_dir = root_dir
+        self.transform = transform
+        self.annotations = pd.read_csv(os.path.join(root_dir, annotation_file), sep='\t', header=None, usecols=[0, 1])
 
-11: boy 12: bridge 13: bus 14: butterfly 15: camel
+    def __len__(self):
+        return len(self.annotations)
 
-16: can 17: castle 18: caterpillar 19: cattle 20: chair
+    def __getitem__(self, idx):
+        img_name = os.path.join(self.root_dir, 'images', self.annotations.iloc[idx, 0])
+        image = Image.open(img_name).convert('RGB')
+        label = torch.tensor(int(self.annotations.iloc[idx, 1]))
 
-21: chimpanzee 22: clock 23: cloud 24: cockroach 25: couch
+        if self.transform:
+            image = self.transform(image)
 
-26: cra 27: crocodile 28: cup 29: dinosaur 30: dolphin
-
-31: elephant 32: flatfish 33: forest 34: fox 35: girl
-
-36: hamster 37: house 38: kangaroo 39: keyboard 40: lamp 41: lawn_mower
-
-42: leopard 43: lion 44: lizard 45: lobster 46: man 47: maple_tree 
-
-48: motorcycle 49: mountain 50: mouse 51: mushroom 52: oak_tree
-
-53: orange 54: orchid 55: otter 56: palm_tree 57: pear
-
-58: pickup_truck 59: pine_tree 60: plain 61: plate 62: poppy
-
-63: porcupine 64: possum 65: rabbit 66: raccoon 67: ray
-
-68: road 69: rocket 70: rose 71: sea 72: seal 73: shark
-
-74: shrew 75: skunk 76: skyscraper 77: snail 78: snake
-
-79: spider 80: squirrel 81: streetcar 82: sunflower 83: sweet_pepper
-
-84: table 85: tank 86: telephone 87: television 88: tiger 89: tractor
-
-90: train 91: trout 92: tulip 93: turtle 94: wardrobe 95: whale
-
-96: willow_tree 97: wolf 98: woman 99: worm
-"""
+        return image, label
 
 
 def getLoaders(datasetName, gen, input_size=None):
-    reclustringLoader = None
     if datasetName == 'cifar100':
         CIFAR100_normalize = Normalize(mean=[0.5071, 0.4867, 0.4408], std=[0.2675, 0.2565, 0.2761])
         # Check if input_size is provided and add Resize transformation accordingly
@@ -112,42 +93,37 @@ def getLoaders(datasetName, gen, input_size=None):
 
     elif datasetName == 'imagenet':
         # Data loading code
-        img_size = 224
+        img_size = 64
         if global_vars.args.dummy:
             print("=> Dummy data is used!")
             train_dataset = datasets.FakeData(128, (3, img_size, img_size), 200, transforms.ToTensor())
             val_dataset = datasets.FakeData(64, (3, img_size, img_size), 200, transforms.ToTensor())
+            train_loader = torch.utils.data.DataLoader(
+                train_dataset, batch_size=global_vars.args.batch_size, shuffle=False,
+                num_workers=global_vars.args.workers, pin_memory=True)
+
+            val_loader = torch.utils.data.DataLoader(
+                val_dataset, batch_size=global_vars.args.batch_size, shuffle=False,
+                num_workers=global_vars.args.workers, pin_memory=True)
+
         else:
+            transform = transforms.Compose([
+                transforms.Resize((64, 64)),  # Tiny ImageNet images are 64x64
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            ])
             traindir = os.path.join(global_vars.args.data_path, 'train')
             valdir = os.path.join(global_vars.args.data_path, 'val')
-            normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                             std=[0.229, 0.224, 0.225])
 
-            train_dataset = datasets.ImageFolder(
-                traindir,
-                transforms.Compose([
-                    transforms.RandomResizedCrop(img_size),
-                    transforms.RandomHorizontalFlip(),
-                    transforms.ToTensor(),
-                    normalize,
-                ]))
+            train_dataset = datasets.ImageFolder(root=traindir, transform=transform)
+            train_loader = DataLoader(train_dataset, batch_size=global_vars.args.batch_size,
+                                      shuffle=True, num_workers=global_vars.args.workers)
 
-            val_dataset = datasets.ImageFolder(
-                valdir,
-                transforms.Compose([
-                    transforms.Resize(256),
-                    transforms.CenterCrop(img_size),
-                    transforms.ToTensor(),
-                    normalize,
-                ]))
-
-        train_loader = torch.utils.data.DataLoader(
-            train_dataset, batch_size=global_vars.args.batch_size, shuffle=False,
-            num_workers=global_vars.args.workers, pin_memory=True)
-
-        val_loader = torch.utils.data.DataLoader(
-            val_dataset, batch_size=global_vars.args.batch_size, shuffle=False,
-            num_workers=global_vars.args.workers, pin_memory=True)
+            val_dataset = TinyImageNetVal(root_dir=valdir,
+                                          annotation_file='val_annotations.txt',
+                                          transform=transform)
+            val_loader = DataLoader(val_dataset, batch_size=global_vars.args.batch_size,
+                                    shuffle=False, num_workers=global_vars.args.workers)
 
         n_classes = 200
         shape = (3, img_size, img_size)
