@@ -169,7 +169,7 @@ args = parser.parse_args()
 
 apply_config(args, args.config)
 
-save_config_in_saving_path(args)
+# save_config_in_saving_path(args)
 
 is_agn = args.method == "RGN" or args.method == "SGN"
 device_name = 'cuda' if is_available() else 'cpu'
