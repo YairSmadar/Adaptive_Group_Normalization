@@ -1,4 +1,4 @@
-from utils.general import download, Path
+from yolov5.utils.general import download, Path
 import zipfile
 import os
 
