@@ -2,10 +2,10 @@ import os
 import sys
 
 # Add the project's root directory to sys.path
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 sys.path.append(project_root)
 
-from utils.general import download, Path
+from yolov5.utils.general import download, Path
 import zipfile
 import os
 
