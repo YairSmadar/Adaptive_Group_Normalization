@@ -1,16 +1,35 @@
 from utils.general import download, Path
+import zipfile
+import os
 
-# Configuration (You might need to adjust the 'yaml' dictionary to fit your script's requirements)
+# Configuration
 yaml = {'path': '/dev/shm/data/coco'}
 
-# Download labels
-segments = False  # segment or box labels
-dir = Path(yaml['path'])  # dataset root dir
-url = 'https://github.com/ultralytics/yolov5/releases/download/v1.0/'
-urls = [url + ('coco2017labels-segments.zip' if segments else 'coco2017labels.zip')]  # labels
-download(urls, dir=dir.parent)
+# Initialize dataset root directory
+dir = Path(yaml['path'])
+image_dir = dir / 'images'
 
-# Download data
-urls = ['http://images.cocodataset.org/zips/train2017.zip',  # 19G, 118k images
-        'http://images.cocodataset.org/zips/val2017.zip']  # 1G, 5k images
-download(urls, dir=dir / 'images', threads=3)
+# Download URLs
+url_base = 'https://github.com/ultralytics/yolov5/releases/download/v1.0/'
+label_urls = [
+    url_base + 'coco2017labels.zip',  # Box labels
+    url_base + 'coco2017labels-segments.zip'  # Segment labels
+]
+data_urls = [
+    'http://images.cocodataset.org/zips/train2017.zip',  # 19G, 118k images
+    'http://images.cocodataset.org/zips/val2017.zip'  # 1G, 5k images
+]
+
+# Function to download and unzip
+def download_and_unzip(urls, destination_dir):
+    downloaded_files = download(urls, dir=destination_dir, threads=3)
+    for file in downloaded_files:
+        with zipfile.ZipFile(file, 'r') as zip_ref:
+            zip_ref.extractall(destination_dir)
+        os.remove(file)  # Optionally, delete the zip file after extraction
+
+# Download and unzip labels
+download_and_unzip(label_urls, dir.parent)
+
+# Download and unzip images
+download_and_unzip(data_urls, image_dir)
