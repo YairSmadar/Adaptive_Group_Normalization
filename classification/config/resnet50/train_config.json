@@ -2,7 +2,7 @@
   "model_version": 1,
   "SGN_version": 14,
   "RGN_version": 1,
-  "use_VGN": true,
+  "use_VGN": false,
   "dataset": "cifar100",
   "arch": "resnet50",
   "eps": 1e-12,
@@ -22,9 +22,6 @@
   "group_by_size": true,
   "group_norm_size": 32,
   "use_wandb": true,
-  "shuff_thrs_std_only": false,
-  "std_threshold_l": 1,
-  "std_threshold_h": 4,
   "scheduler_name": "default",
   "classes_to_train":
   [
