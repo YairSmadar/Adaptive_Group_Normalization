@@ -126,7 +126,7 @@ def getLoaders(datasetName, gen, input_size=None):
             train_dataset = datasets.ImageFolder(
                 traindir,
                 transforms.Compose([
-                    transforms.Resize((img_size, img_size)),
+                    transforms.RandomResizedCrop(img_size),
                     transforms.RandomHorizontalFlip(),
                     transforms.ToTensor(),
                     normalize,
@@ -135,7 +135,8 @@ def getLoaders(datasetName, gen, input_size=None):
             val_dataset = datasets.ImageFolder(
                 valdir,
                 transforms.Compose([
-                    transforms.Resize((img_size, img_size)),
+                    transforms.Resize(256),
+                    transforms.CenterCrop(img_size),
                     transforms.ToTensor(),
                     normalize,
                 ]))
