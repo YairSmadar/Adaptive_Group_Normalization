@@ -189,16 +189,16 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                     "method": opt.method,
                     "group_by_size": opt.group_by_size,
                     "group_norm_size": opt.group_norm_size,
-                    "group_norm": -1,
+                    "group_norm": 16,  # default
                 },
             "SGN_args":
                 {
                     "eps": opt.eps,
-                    "no_shuff_best_k_p": 1,
-                    "shuff_thrs_std_only": False,
-                    "std_threshold_l": 0,
-                    "std_threshold_h": 0,
-                    "keep_best_group_num_start": -1,
+                    "no_shuff_best_k_p": 1.0,  # default
+                    "shuff_thrs_std_only": False,  # default
+                    "std_threshold_l": -1,  # default
+                    "std_threshold_h": 1,  # default
+                    "keep_best_group_num_start": 0,  # default
                     "use_VGN": opt.use_VGN,
                     "VGN_min_gs_mul": 1 - opt.VGN_gs_extra_range,
                     "VGN_max_gs_mul": 1 + opt.VGN_gs_extra_range
@@ -300,6 +300,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
     mlc = int(labels[:, 0].max())  # max label class
     assert mlc < nc, f'Label class {mlc} exceeds nc={nc} in {data}. Possible class labels are 0-{nc - 1}'
 
+    print(f"!!!!!!! {RANK=} !!!!!!!!!!!")
     # Process 0
     if RANK in {-1, 0}:
         val_loader = create_dataloader(val_path,
