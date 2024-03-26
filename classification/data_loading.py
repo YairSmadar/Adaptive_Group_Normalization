@@ -95,7 +95,7 @@ def getLoaders(datasetName, gen, input_size=None):
 
     elif datasetName == 'imagenet':
         # Data loading code
-        img_size = 64
+        img_size = 224
         if global_vars.args.dummy:
             print("=> Dummy data is used!")
             train_dataset = datasets.FakeData(128, (3, img_size, img_size), 200, transforms.ToTensor())
@@ -109,22 +109,31 @@ def getLoaders(datasetName, gen, input_size=None):
                 num_workers=global_vars.args.workers, pin_memory=True)
 
         else:
-            transform = transforms.Compose([
-                transforms.Resize((64, 64)),  # Tiny ImageNet images are 64x64
+            train_transform = transforms.Compose([
+                transforms.RandomResizedCrop(img_size),  # Tiny ImageNet images are 64x64
+                transforms.RandomHorizontalFlip(),
+                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+                transforms.ToTensor()
+            ])
+
+            val_transform = transforms.Compose([
+                transforms.Resize(256),  # Tiny ImageNet images are 64x64
+                transforms.CenterCrop(img_size),
                 transforms.ToTensor(),
                 transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
             ])
+
             traindir = os.path.join(global_vars.args.data_path, 'train')
             valdir = os.path.join(global_vars.args.data_path, 'val')
 
-            train_dataset = datasets.ImageFolder(root=traindir, transform=transform)
+            train_dataset = datasets.ImageFolder(root=traindir, transform=train_transform)
             train_loader = DataLoader(train_dataset, batch_size=global_vars.args.batch_size,
                                       shuffle=True, num_workers=global_vars.args.workers)
             class_to_idx = train_dataset.class_to_idx
             val_dataset = TinyImageNetVal(root_dir=valdir,
                                           annotation_file='val_annotations.txt',
                                           class_to_idx=class_to_idx,
-                                          transform=transform)
+                                          transform=val_transform)
             val_loader = DataLoader(val_dataset, batch_size=global_vars.args.batch_size,
                                     shuffle=False, num_workers=global_vars.args.workers)
 
