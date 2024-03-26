@@ -13,10 +13,11 @@ import pandas as pd
 
 
 class TinyImageNetVal(Dataset):
-    def __init__(self, root_dir, annotation_file, transform=None):
+    def __init__(self, root_dir, annotation_file, class_to_idx, transform=None):
         self.root_dir = root_dir
         self.transform = transform
         self.annotations = pd.read_csv(os.path.join(root_dir, annotation_file), sep='\t', header=None, usecols=[0, 1])
+        self.class_to_idx = class_to_idx  # Mapping from class IDs to integer indices
 
     def __len__(self):
         return len(self.annotations)
@@ -24,12 +25,13 @@ class TinyImageNetVal(Dataset):
     def __getitem__(self, idx):
         img_name = os.path.join(self.root_dir, 'images', self.annotations.iloc[idx, 0])
         image = Image.open(img_name).convert('RGB')
-        label = torch.tensor(int(self.annotations.iloc[idx, 1]))
+        # Convert the class ID to an integer index
+        label = self.class_to_idx[self.annotations.iloc[idx, 1]]
 
         if self.transform:
             image = self.transform(image)
 
-        return image, label
+        return image, torch.tensor(label)
 
 
 def getLoaders(datasetName, gen, input_size=None):
@@ -118,9 +120,10 @@ def getLoaders(datasetName, gen, input_size=None):
             train_dataset = datasets.ImageFolder(root=traindir, transform=transform)
             train_loader = DataLoader(train_dataset, batch_size=global_vars.args.batch_size,
                                       shuffle=True, num_workers=global_vars.args.workers)
-
+            class_to_idx = train_dataset.class_to_idx
             val_dataset = TinyImageNetVal(root_dir=valdir,
                                           annotation_file='val_annotations.txt',
+                                          class_to_idx=class_to_idx,
                                           transform=transform)
             val_loader = DataLoader(val_dataset, batch_size=global_vars.args.batch_size,
                                     shuffle=False, num_workers=global_vars.args.workers)
