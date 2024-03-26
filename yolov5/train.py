@@ -300,7 +300,6 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
     mlc = int(labels[:, 0].max())  # max label class
     assert mlc < nc, f'Label class {mlc} exceeds nc={nc} in {data}. Possible class labels are 0-{nc - 1}'
 
-    print(f"!!!!!!! {RANK=} !!!!!!!!!!!")
     # Process 0
     if RANK in {-1, 0}:
         val_loader = create_dataloader(val_path,
@@ -473,16 +472,16 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
             final_epoch = (epoch + 1 == epochs) or stopper.possible_stop
             if not noval or final_epoch:  # Calculate mAP
                 results, maps, _ = validate.run(data_dict,
-                                                                   batch_size=batch_size // WORLD_SIZE * 2,
-                                                                   imgsz=imgsz,
-                                                                   half=amp,
-                                                                   model=ema.ema,
-                                                                   single_cls=single_cls,
-                                                                   dataloader=val_loader,
-                                                                   save_dir=save_dir,
-                                                                   plots=False,
-                                                                   callbacks=callbacks,
-                                                                   compute_loss=compute_loss)
+                                                batch_size=batch_size // WORLD_SIZE,
+                                                imgsz=imgsz,
+                                                half=amp,
+                                                model=ema.ema,
+                                                single_cls=single_cls,
+                                                dataloader=val_loader,
+                                                save_dir=save_dir,
+                                                plots=False,
+                                                callbacks=callbacks,
+                                                compute_loss=compute_loss)
 
             # Update best mAP
             fi = fitness(np.array(results).reshape(1, -1))  # weighted combination of [P, R, mAP@.5, mAP@.5-.95]
@@ -567,7 +566,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                     LOGGER.info(f'\nValidating {f}...')
                     results, _, _ = validate.run(
                         data_dict,
-                        batch_size=batch_size // WORLD_SIZE * 2,
+                        batch_size=batch_size // WORLD_SIZE,
                         imgsz=imgsz,
                         model=attempt_load(f, device).half(),
                         iou_thres=0.65 if is_coco else 0.60,  # best pycocotools at iou 0.65
