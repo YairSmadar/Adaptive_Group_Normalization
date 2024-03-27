@@ -445,6 +445,18 @@ class ModelEMA:
             if v.dtype.is_floating_point:  # true for FP16 and FP32
                 v *= d
                 v += (1 - d) * msd[k].detach()
+
+        for name1, module1 in model.named_modules():
+            if type(module1) == sgn:
+                for name2, module2 in self.ema.named_modules():
+                    if name2 == name1:
+                        module2.indexes = module1.indexes
+                        module2.reverse_indexes = module1.reverse_indexes
+                        module2.eval_indexes = module1.eval_indexes
+                        module2.eval_reverse_indexes = module1.eval_reverse_indexes
+                        break
+
+
         # assert v.dtype == msd[k].dtype == torch.float32, f'{k}: EMA {v.dtype} and model {msd[k].dtype} must be FP32'
 
     def update_attr(self, model, include=(), exclude=('process_group', 'reducer')):
