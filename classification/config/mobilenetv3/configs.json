@@ -1,0 +1,32 @@
+{
+    "gpu_number": "0",
+    "train_script": "train.py",
+    "config_file_path": "config/efficientnet/train_config.json",
+
+    "train_configs": 
+    [
+            {
+                "seed": 0,
+                "method": "GN",
+                "dataset": "imagenet-1k",
+                "arch": "efficientnet-b0",
+                "data_path": "~/imagenet/",
+                "batch_size": 416,
+                "group_norm_size": 32,
+                "group_by_size": true
+            },
+            {
+                "method": "SGN",
+                "use_VGN": false
+            },
+
+            {
+                "seed": 1,
+                "method": "GN"
+            },
+            {
+                "method": "SGN",
+                "use_VGN": false
+            }
+    ]
+}

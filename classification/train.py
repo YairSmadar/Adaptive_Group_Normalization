@@ -36,7 +36,7 @@ benchmark = False
 use_deterministic_algorithms(True)
 
 from agn_src.agn_scheduler import AGNScheduler
-from models.models_maneger import ModelsManeger
+from models.models_manager import ModelsManeger
 
 
 def main():
@@ -103,7 +103,7 @@ def main():
 
     setting_args = {'n_class': n_classes,
                     'input_size': input_size,
-                    'width_mult': 1}
+                    'width_mult': args.width_mult}
 
     model_args = {**normalization_args, **setting_args}
 

@@ -131,6 +131,9 @@ parser.add_argument('--VGN_min_gs_mul', default=1, type=float,
 parser.add_argument('--device', default=0, type=int, help='GPU number list (only if cuda available')
 parser.add_argument('--dummy', default=False, type=bool,
                     help='use dummy data in imagenet')
+parser.add_argument('--width_mult', default=1.0, type=float,
+                    help='channels width multiple')
+
 
 def apply_config(args: Namespace, config_path: str):
     """Overwrite the values in an arguments object by values of namesake
