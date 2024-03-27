@@ -11,7 +11,7 @@
                 "dataset": "imagenet-1k",
                 "arch": "efficientnet-b3",
                 "data_path": "~/imagenet/",
-                "batch_size": 1024,
+                "batch_size": 512,
                 "group_norm_size": 32,
                 "group_by_size": true
             },
