@@ -93,7 +93,7 @@ def getLoaders(datasetName, gen, input_size=None):
         H, W, C = train_loader.dataset.data.shape[1:]
         return train_loader, val_loader, len(train_loader.dataset.classes), (C, H, W)
 
-    elif datasetName == 'imagenet':
+    elif datasetName == 'imagenet-tiny':
         # Data loading code
         img_size = 224
         if global_vars.args.dummy:
@@ -139,6 +139,49 @@ def getLoaders(datasetName, gen, input_size=None):
 
         n_classes = 200
         shape = (3, img_size, img_size)
+        return train_loader, val_loader, n_classes, shape
+    elif datasetName == 'imagenet-1k':
+        # Data loading code
+        if global_vars.args.dummy:
+            print("=> Dummy data is used!")
+            train_dataset = datasets.FakeData(1281167, (3, 224, 224), 1000, transforms.ToTensor())
+            val_dataset = datasets.FakeData(50000, (3, 224, 224), 1000, transforms.ToTensor())
+        else:
+            traindir = os.path.join(global_vars.args.data_path, 'train')
+            valdir = os.path.join(global_vars.args.data_path, 'val')
+            normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                             std=[0.229, 0.224, 0.225])
+
+            train_dataset = datasets.ImageFolder(
+                traindir,
+                transforms.Compose([
+                    transforms.RandomResizedCrop(224),
+                    transforms.RandomHorizontalFlip(),
+                    transforms.ToTensor(),
+                    normalize,
+                ]))
+
+            val_dataset = datasets.ImageFolder(
+                valdir,
+                transforms.Compose([
+                    transforms.Resize(256),
+                    transforms.CenterCrop(224),
+                    transforms.ToTensor(),
+                    normalize,
+                ]))
+
+        train_sampler = None
+        val_sampler = None
+
+        train_loader = torch.utils.data.DataLoader(
+            train_dataset, batch_size=global_vars.args.batch_size, shuffle=False,
+            num_workers=global_vars.args.workers, pin_memory=True, sampler=train_sampler, generator=gen)
+
+        val_loader = torch.utils.data.DataLoader(
+            val_dataset, batch_size=global_vars.args.batch_size, shuffle=False,
+            num_workers=global_vars.args.workers, pin_memory=True, sampler=val_sampler)
+        n_classes = 1000
+        shape = (3, 224, 224)
         return train_loader, val_loader, n_classes, shape
     else:
         raise Exception("dataset isn't supported.")

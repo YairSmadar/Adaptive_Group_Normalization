@@ -8,10 +8,10 @@
             {
                 "seed": 0,
                 "method": "GN",
-                "dataset": "imagenet",
+                "dataset": "imagenet-1k",
                 "arch": "efficientnet-b3",
-                "data_path": "/dev/shm/data/tiny-imagenet-200",
-                "batch_size": 16,
+                "data_path": "~/imagenet/",
+                "batch_size": 32,
                 "group_norm_size": 32,
                 "group_by_size": true
             },
