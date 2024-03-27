@@ -22,7 +22,7 @@
     "seed": 0,
     "group_by_size": true,
     "group_norm_size": 32,
-    "use_wandb": false,
+    "use_wandb": true,
     "scheduler_name": "default",
     "classes_to_train":
     [
