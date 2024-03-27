@@ -1,7 +1,7 @@
 {
     "gpu_number": "0",
     "train_script": "train.py",
-    "config_file_path": "config/efficientnet/train_config.json",
+    "config_file_path": "config/mobilenetv3/train_config.json",
 
     "train_configs": 
     [
@@ -9,11 +9,12 @@
                 "seed": 0,
                 "method": "GN",
                 "dataset": "imagenet-1k",
-                "arch": "efficientnet-b0",
+                "arch": "mobilenetv3-small",
                 "data_path": "~/imagenet/",
-                "batch_size": 416,
+                "batch_size": 32,
                 "group_norm_size": 32,
-                "group_by_size": true
+                "group_by_size": true,
+                "width_mult": 0.75
             },
             {
                 "method": "SGN",
