@@ -19,11 +19,6 @@
                 "method": "SGN",
                 "use_VGN": false
             },
-            {
-                "method": "SGN",
-                "VGN_gs_extra_range": 0.2,
-                "use_VGN": true
-            },
 
             {
                 "seed": 1,
@@ -32,24 +27,6 @@
             {
                 "method": "SGN",
                 "use_VGN": false
-            },
-            {
-                "method": "SGN",
-                "use_VGN": true
-            },
-
-
-            {
-                "seed": 2,
-                "method": "GN"
-            },
-            {
-                "method": "SGN",
-                "use_VGN": false
-            },
-            {
-                "method": "SGN",
-                "use_VGN": true
             }
     ]
 }
