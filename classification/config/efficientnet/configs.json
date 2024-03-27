@@ -1,5 +1,5 @@
 {
-    "gpu_number": "3",
+    "gpu_number": "0",
     "train_script": "train.py",
     "config_file_path": "config/efficientnet/train_config.json",
 
