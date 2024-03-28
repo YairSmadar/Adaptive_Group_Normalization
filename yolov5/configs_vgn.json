@@ -16,7 +16,8 @@
                 "epoch_start_cluster": 0,
                 "num_of_epch_to_shuffle": 20,
                 "max_norm_shuffle": 50,
-                "VGN_gs_extra_range": 0.2,
+                "VGN_gs_extra_range": 0.1,
+                "epochs": 600,
                 "weights": ""
             },
             {
